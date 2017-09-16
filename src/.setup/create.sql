@@ -37,7 +37,7 @@ CREATE TABLE auth3_access_tokens (
 		ON DELETE CASCADE,
 	access_token VARCHAR(128),
 	scopes VARCHAR(2048),
-	is_revoked TINYINT(1),
+	is_revoked TINYINT(1) DEFAULT 0,
 	expires TIMESTAMP 
 		DEFAULT CURRENT_TIMESTAMP
 		ON UPDATE CURRENT_TIMESTAMP,
@@ -58,11 +58,12 @@ CREATE TABLE auth3_refresh_tokens (
 	refresh_token VARCHAR(128),
 	access_token VARCHAR(128),
 	#scopes VARCHAR(2048),
-	is_revoked TINYINT(1),
+	is_revoked TINYINT(1) DEFAULT 0,
 	expires TIMESTAMP 
 		DEFAULT CURRENT_TIMESTAMP
 		ON UPDATE CURRENT_TIMESTAMP,
 	UNIQUE (refresh_token),
+	CHECK (access_token IN (SELECT access_token FROM auth3_access_tokens)),
 	PRIMARY KEY (id)
 ) charset=utf8 ENGINE=INNODB;
 
@@ -77,6 +78,7 @@ CREATE TABLE auth3_authorization_codes (
 		REFERENCES auth3_clients(id)
 		ON DELETE CASCADE,
 	authorization_code VARCHAR(40),
+	is_revoked TINYINT(1) DEFAULT 0,
 	expires TIMESTAMP 
 		DEFAULT CURRENT_TIMESTAMP
 		ON UPDATE CURRENT_TIMESTAMP,
@@ -88,7 +90,7 @@ CREATE TABLE auth3_authorization_codes (
 CREATE TABLE auth3_scopes (
 	id INT NOT NULL AUTO_INCREMENT,
 	name varchar(80),
-	is_default TINYINT(1),
+	is_default TINYINT(1) DEFAULT 0,
 	PRIMARY KEY (id)
 ) charset=utf8 ENGINE=INNODB;
 

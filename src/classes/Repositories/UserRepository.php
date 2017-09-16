@@ -51,4 +51,25 @@ class UserRepository implements UserRepositoryInterface {
     	return null;
     }
 
+    /**
+    * @return UserEntityInterface
+     */
+    public function getUserEntityByIdentifier($identifier) {
+        $db = Database::getDatabase();
+
+        $stmt = $db->prepare("SELECT * FROM auth3_users WHERE id = :identifier LIMIT 1");
+        $stmt->execute(compact('identifier'));
+
+        if ($user = $stmt->fetch()) {
+
+            //$id = $user['id'];
+            $username = $user['email'];
+            $gAuthCode = $user['twofactor_enabled'];
+            $hasTwoFactor = $gAuthCode != '';
+            
+            return new UserEntity($identifier, $username, $hasTwoFactor, $gAuthCode);
+        }
+        return null;
+    }
+
 }

@@ -8,12 +8,14 @@ class UserEntity implements UserEntityInterface {
     protected $email = null;
 	protected $hasTwoFactor = false;
 	protected $gAuthCode = null;
+    protected $verified = false;
 
-	public function __construct($identifier, $email, $hasTwoFactor, $gAuthCode) {
+	public function __construct($identifier, $email, $hasTwoFactor, $gAuthCode, $verified) {
 		$this->identifier = $identifier;
         $this->email = $email;
 		$this->hasTwoFactor = $hasTwoFactor;
 		$this->gAuthCode = $gAuthCode;
+        $this->verified = $verified;
 	}
 
     /**
@@ -48,5 +50,13 @@ class UserEntity implements UserEntityInterface {
     */
     public function getGoogleAuthenticatorCode() {
     	return $this->gAuthCode;
+    }
+
+    /**
+    * Return the user's email verification status
+    * @return string
+    */
+    public function getEmailVerification() {
+        return $this->verified;
     }
 }
