@@ -5,8 +5,8 @@ CREATE TABLE auth3_users (
 	first_name VARCHAR(128),
 	family_name VARCHAR(128),
 	#g_authcode VARCHAR(64),
-	twofactor_enabled VARCHAR(16),		# contains g_authcode if yes, else nothing
-	verification_status VARCHAR(40),
+	twofactor VARCHAR(16) DEFAULT NULL,		# contains g_authcode if yes, else nothing
+	verification_status VARCHAR(40) DEFAULT 'false',
 	join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY (id)
 ) charset=utf8 ENGINE=INNODB;
@@ -36,6 +36,7 @@ CREATE TABLE auth3_access_tokens (
 		REFERENCES auth3_clients(id)
 		ON DELETE CASCADE,
 	access_token VARCHAR(128),
+	access_token_raw VARCHAR(512),
 	scopes VARCHAR(2048),
 	is_revoked TINYINT(1) DEFAULT 0,
 	expires TIMESTAMP 
@@ -57,6 +58,7 @@ CREATE TABLE auth3_refresh_tokens (
 		ON DELETE CASCADE,*/
 	refresh_token VARCHAR(128),
 	access_token VARCHAR(128),
+	refresh_token_raw VARCHAR(512),
 	#scopes VARCHAR(2048),
 	is_revoked TINYINT(1) DEFAULT 0,
 	expires TIMESTAMP 

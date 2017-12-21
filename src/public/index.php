@@ -63,24 +63,54 @@ $app->get('/', function(Request $request, Response $response) {
 * POST => [email,password,g-recaptcha-response]
 */
 $app->post('/api/users/new', function(Request $request, Response $response) {
-
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $email = $request->getParsedBodyParam('email');
+    $password = $request->getParsedBodyParam('password');
+    $recaptcha = $request->getParsedBodyParam('g-recaptcha-response');
+    $result = $userRepository->createUser($email, $password, $recaptcha);
+    if ($result['error'] != 'success') {
+        $json = $result;
+    } else {
+        $json = [
+            'firstname' => $result['user']->getFirstname(),
+            'familyname' => $result['user']->getFamilyname(),
+            'email' => $result['user']->getEmail(),
+            'image' => 'https://www.gravatar.com/avatar/'.md5($result['user']->getEmail()).'?d=retro&r=r'
+        ];
+    }
+    $response = $response->withJson($json);
 	return $response;
 });
-/** Check if user exists and fetch basic account info
-* HEADER => [Authorization]
+/**
+* Check if an email is taken
 */
-$app->get('/api/users/{email}', function(Request $request, Response $response) {
-	$email = $request->getAttribute('email');
-	$headers = $request->getHeaders();
-	// if Authorization header is valid, return full account data
-	// else return name, profile picture
-
-	return $response;
+$app->get('/api/exists/{email}', function(Request $request, Response $response) {
+    $email = $request->getAttribute('email');
+    // if Authorization header is valid, return full account data
+    // else return name, profile picture
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $userData = $userRepository->getUserEntityByEmail($email);
+    //print_r($userData);
+    if ($userData != null) {
+        $json = [
+            'firstname' => $userData->getFirstname(),
+            'familyname' => $userData->getFamilyname(),
+            'email' => $userData->getEmail(),
+            'image' => 'https://www.gravatar.com/avatar/'.md5($userData->getEmail()).'?d=retro&r=r'
+        ];
+    } else {
+        $json = [
+            'status' => 'error',
+            'message' => 'No user with this email exists.'
+        ];
+    }
+    $response = $response->withJson($json);
+    return $response;
 });
 /** Handle token request
 * POST => [grant_type,client_id,client_secret,scope,username,password,authcode]
 */
-$app->post('/token', function(Request $request, Response $response) {
+$app->post('/api/token', function(Request $request, Response $response) {
 	/* @var \League\OAuth2\Server\AuthorizationServer $server */
     $server = $this->oauth_server;
 
@@ -103,14 +133,14 @@ $app->post('/token', function(Request $request, Response $response) {
     }
 });
 
-$app->any('/token/validate', function(Request $request, Response $response) {
+$app->any('/api/token/validate', function(Request $request, Response $response) {
 	return $response;
 })->add($oauth_resource_server_middleware);
 
 /** Handle authorize request
 * GET -> [response_type, client_id, redirect_uri, scope, state]
 */
-$app->get('/authorize', function(Request $request, Response $response) {
+$app->get('/api/authorize', function(Request $request, Response $response) {
 	$server = $this->oauth_server;
 
 	$authRequest = $server->validateAuthorizationRequest($request);
@@ -122,19 +152,22 @@ $app->get('/authorize', function(Request $request, Response $response) {
 
     $_SESSION['authorization_code_request'] = $authRequest;
 
+    $clientRepository = new \Auth3\Repositories\ClientRepository();
+    //$client = $clientRepository->getClientEntity($clientId, $grantType, null, false);
+
 
     //echo '<pre>';
     //print_r($authRequest);
     //var_dump($this->oauth_server);
     
-    $response = $this->view->render($response, "authorize.phtml");
+    $response = $this->view->render($response, "authorize.phtml", []);
     // At this point you should redirect the user to an authorization page.
     // This form will ask the user to approve the client and the scopes requested.
     return $response;
 });
 
 // requires resource server
-$app->post('/authorize/submit', function(Request $request, Response $response) {
+$app->post('/api/authorize/accept', function(Request $request, Response $response) {
 
 
 	session_name('AUTH3_SESSID');
@@ -169,6 +202,53 @@ $app->post('/authorize/submit', function(Request $request, Response $response) {
     session_destroy();
 
     return $res;
-});//->add($oauth_resource_server_middleware);
+})->add($oauth_resource_server_middleware);
+
+// requires resource server
+$app->post('/api/authorize/deny', function(Request $request, Response $response) {
+
+
+    session_name('AUTH3_SESSID');
+    session_start();
+    $authRequest = $_SESSION['authorization_code_request'];
+
+    $user_id = $request['oauth_access_token_id'];
+
+    // Once the user has logged in set the user on the AuthorizationRequest
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $authRequest->setUser($userRepository->getUserEntityByIdentifier($user_id)); // an instance of UserEntityInterface
+    
+    // Once the user has approved or denied the client update the status
+    // (true = approved, false = denied)
+    $authRequest->setAuthorizationApproved(false);
+
+    // Return the HTTP redirect response
+    $res = $server->completeAuthorizationRequest($authRequest, $response);
+    unset($_SESSION['authorization_code_request']);
+    session_destroy();
+
+    return $res;
+})->add($oauth_resource_server_middleware);
+
+/** Check if user exists and fetch all account info
+* HEADER => [Authorization]
+*/
+$app->get('/users/{email}', function(Request $request, Response $response) {
+    $email = $request->getAttribute('email');
+    $headers = $request->getHeaders();
+    echo $email;
+    return $response;
+})->add($oauth_resource_server_middleware);
+
+$app->options('/{routes:.+}', function ($request, $response, $args) {
+    return $response;
+});
+$app->add(function($req, $res, $next) {
+    $response = $next($req, $res);
+    return $response
+            ->withHeader('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
+            ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+});
 
 $app->run();

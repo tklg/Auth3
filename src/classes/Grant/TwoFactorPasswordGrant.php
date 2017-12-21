@@ -98,7 +98,7 @@ class TwoFactorPasswordGrant extends \League\OAuth2\Server\Grant\AbstractGrant {
 
 
         // check if user has 2fa enabled
-        if ($user->hasTwoFactorEnabled()) {
+        if ($user->hasTwoFactor()) {
 
             $authcode = $this->getRequestParameter('authcode', $request);
             if (is_null($authcode)) {

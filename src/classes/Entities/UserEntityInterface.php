@@ -14,7 +14,7 @@ interface UserEntityInterface extends \League\OAuth2\Server\Entities\UserEntityI
 	* Return whether or not the user has 2fa enabled
 	* @return boolean
     */
-    public function hasTwoFactorEnabled();
+    public function hasTwoFactor();
 
     /**
 	* Return the user's unique gauth code

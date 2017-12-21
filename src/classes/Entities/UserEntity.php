@@ -9,13 +9,17 @@ class UserEntity implements UserEntityInterface {
 	protected $hasTwoFactor = false;
 	protected $gAuthCode = null;
     protected $verified = false;
+    protected $firstname = null;
+    protected $familyname = null;
 
-	public function __construct($identifier, $email, $hasTwoFactor, $gAuthCode, $verified) {
+	public function __construct($identifier, $email, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified) {
 		$this->identifier = $identifier;
         $this->email = $email;
 		$this->hasTwoFactor = $hasTwoFactor;
 		$this->gAuthCode = $gAuthCode;
         $this->verified = $verified;
+        $this->firstname = $firstname;
+        $this->familyname = $familyname;
 	}
 
     /**
@@ -37,10 +41,28 @@ class UserEntity implements UserEntityInterface {
     }
 
     /**
+     * Return the user's first name.
+     *
+     * @return string
+     */
+    public function getFirstname() {
+        return $this->firstname;
+    }
+
+    /**
+     * Return the user's family name.
+     *
+     * @return string
+     */
+    public function getFamilyname() {
+        return $this->familyname;
+    }
+
+    /**
 	* Return whether or not the user has 2fa enabled
 	* @return boolean
     */
-    public function hasTwoFactorEnabled() {
+    public function hasTwoFactor() {
     	return $this->hasTwoFactor;
     }
 
