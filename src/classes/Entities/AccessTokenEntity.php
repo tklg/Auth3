@@ -134,7 +134,7 @@ class AccessTokenEntity implements AccessTokenEntityInterface {
             if ($s->getIdentifier() === $scope->getIdentifier()) $needsToAdd = false;
         }
         if ($needsToAdd) {
-            $this->scopes[] = $scope;
+            array_push($this->scopes, $scope);
         }
     }
 
@@ -142,8 +142,12 @@ class AccessTokenEntity implements AccessTokenEntityInterface {
      * Return an array of scopes associated with the token.
      *
      * @return ScopeEntityInterface[]
+     * LIES ALL LIES THEY NEED TO BE STRINGS APPARENTLY????
      */
     public function getScopes() {
-        return $this->scopes;
+        //return $this->scopes;
+        $scopes = [];
+        foreach ($this->scopes as $scope) $scopes[] = $scope->getIdentifier();
+        return $scopes;
     }
 }

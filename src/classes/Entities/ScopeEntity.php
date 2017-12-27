@@ -22,6 +22,8 @@ class ScopeEntity implements ScopeEntityInterface {
     }
 
     public function jsonSerialize() {
+        //echo "SDASDASDASDAd";
+        //return $this->identifier;
     	return json_encode([$this->identifier]);
     }
 }

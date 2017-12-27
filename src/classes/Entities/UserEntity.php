@@ -11,8 +11,9 @@ class UserEntity implements UserEntityInterface {
     protected $verified = false;
     protected $firstname = null;
     protected $familyname = null;
+    protected $joindate = null;
 
-	public function __construct($identifier, $email, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified) {
+	public function __construct($identifier, $email, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate) {
 		$this->identifier = $identifier;
         $this->email = $email;
 		$this->hasTwoFactor = $hasTwoFactor;
@@ -20,6 +21,7 @@ class UserEntity implements UserEntityInterface {
         $this->verified = $verified;
         $this->firstname = $firstname;
         $this->familyname = $familyname;
+        $this->joindate = $joindate;
 	}
 
     /**
@@ -80,5 +82,13 @@ class UserEntity implements UserEntityInterface {
     */
     public function getEmailVerification() {
         return $this->verified;
+    }
+
+    /**
+    * Return the user's join date
+    * @return string
+    */
+    public function getJoinDate() {
+        return $this->joindate;
     }
 }

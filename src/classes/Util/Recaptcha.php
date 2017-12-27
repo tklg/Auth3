@@ -1,6 +1,6 @@
 <?php
 
-namespace Auth3\Captcha;
+namespace Auth3\Util;
 
 class Recaptcha {
 

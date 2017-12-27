@@ -111,7 +111,8 @@ $app->get('/api/exists/{email}', function(Request $request, Response $response) 
 * POST => [grant_type,client_id,client_secret,scope,username,password,authcode]
 */
 $app->post('/api/token', function(Request $request, Response $response) {
-	/* @var \League\OAuth2\Server\AuthorizationServer $server */
+    // http://ipinfodb.com/ip_location_api.php
+    // http://www.hostip.info/index.html?spip=0.0.0.0
     $server = $this->oauth_server;
 
     try {
@@ -133,10 +134,44 @@ $app->post('/api/token', function(Request $request, Response $response) {
     }
 });
 
-$app->any('/api/token/validate', function(Request $request, Response $response) {
-	return $response;
+/** 
+*   delete an auth token
+*/
+$app->delete('/api/token/{id}', function(Request $request, Response $response) {
+    $tokenId = $request->getAttribute('id');
+    
+    $accessTokenRepository = new \Auth3\Repositories\AccessTokenRepository();
+    $accessTokenRepository->revokeAccessTokenById($tokenId);
+
+    $json = [
+        'message' => "Revoked access token."
+    ];
+    $response = $response->withJson($json);
+    return $response;
+});
+
+/**
+* log the user out by revoking the current token
+*/
+$app->get('/api/logout', function(Request $request, Response $response) {
+    $tokenId = $request->getAttribute('oauth_access_token_id');
+    
+    $accessTokenRepository = new \Auth3\Repositories\AccessTokenRepository();
+    $accessTokenRepository->revokeAccessToken($tokenId);
+
+    $json = [
+        'message' => "Revoked access token."
+    ];
+    $response = $response->withJson($json);
+    return $response;
 })->add($oauth_resource_server_middleware);
 
+/** 
+*   validate a token
+*/
+$app->map(['GET', 'POST'], '/api/token/validate', function(Request $request, Response $response) {
+	return $response;
+})->add($oauth_resource_server_middleware);
 /** Handle authorize request
 * GET -> [response_type, client_id, redirect_uri, scope, state]
 */
@@ -190,7 +225,8 @@ $app->post('/api/authorize/accept', function(Request $request, Response $respons
 
 	// Once the user has logged in set the user on the AuthorizationRequest
 	$userRepository = new \Auth3\Repositories\UserRepository();
-    $authRequest->setUser($userRepository->getUserEntityByIdentifier($user_id)); // an instance of UserEntityInterface
+    $user = $userRepository->getUserEntityByIdentifier($user_id);
+    $authRequest->setUser($user); // an instance of UserEntityInterface
     
     // Once the user has approved or denied the client update the status
     // (true = approved, false = denied)
@@ -198,6 +234,8 @@ $app->post('/api/authorize/accept', function(Request $request, Response $respons
 
     // Return the HTTP redirect response
     $res = $server->completeAuthorizationRequest($authRequest, $response);
+    $logRepository = new \Auth3\Repositories\EventLogRepository();
+    $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'auth', $_SERVER['REMOTE_ADDR'], $user->getIdentifier()));
     unset($_SESSION['authorization_code_request']);
     session_destroy();
 
@@ -233,10 +271,93 @@ $app->post('/api/authorize/deny', function(Request $request, Response $response)
 /** Check if user exists and fetch all account info
 * HEADER => [Authorization]
 */
-$app->get('/users/{email}', function(Request $request, Response $response) {
-    $email = $request->getAttribute('email');
-    $headers = $request->getHeaders();
-    echo $email;
+$app->get('/api/user/info', function(Request $request, Response $response) {
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $userData = $userRepository->getUserEntityByIdentifier($request->getAttribute('oauth_user_id'));
+    if ($userData != null) {
+        $json = [
+            'firstname' => $userData->getFirstname(),
+            'familyname' => $userData->getFamilyname(),
+            'email' => $userData->getEmail(),
+            'image' => 'https://www.gravatar.com/avatar/'.md5($userData->getEmail()).'?d=retro&r=r',
+            'joindate' => $userData->getJoinDate()
+        ];
+    } else {
+        $json = [
+            'status' => 'error',
+            'message' => 'No user with this token exists.'
+        ];
+    }
+
+    $response = $response->withJson($json);
+    return $response;
+})->add($oauth_resource_server_middleware);
+
+/**
+* return user security details (2fa, sessions, history)
+*/
+$app->get('/api/user/security', function(Request $request, Response $response) {
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $accessTokenRepository = new \Auth3\Repositories\AccessTokenRepository();
+    $logRepository = new \Auth3\Repositories\EventLogRepository();
+    $userId = $request->getAttribute('oauth_user_id');
+    $userData = $userRepository->getUserEntityByIdentifier($userId);
+    $tokens = $accessTokenRepository->getAccessTokensByUserId($userId, $request->getAttribute('oauth_access_token_id'));
+    $history = $logRepository->getEventsByUserId($userId);
+
+    $json = [
+        'hasTwoFactor' => $userData->hasTwoFactor(),
+        'sessions' => $tokens,
+        'history' => $history
+    ];
+
+    $response = $response->withJson($json);
+    return $response;
+})->add($oauth_resource_server_middleware);
+
+/**
+*   return user's authorized applications
+*/
+$app->get('/api/user/applications', function(Request $request, Response $response) {
+    $userRepository = new \Auth3\Repositories\UserRepository();
+
+    $json = [];
+
+    $response = $response->withJson($json);
+    return $response;
+})->add($oauth_resource_server_middleware);
+
+/**
+*   update user info
+*/
+$app->post('/api/user/info', function(Request $request, Response $response) {
+    $userId = $request->getAttribute('oauth_user_id');
+    $userRepository = new \Auth3\Repositories\UserRepository();
+
+    function buildFromParams(Request $req, array $plist) {
+        $res = [];
+        foreach ($plist as $param) {
+            $d = $req->getParsedBodyParam($param);
+            if (isset($d)) $res[$param] = $d;
+        }
+        return $res;
+    }
+    $data = buildFromParams($request, ['firstname', 'familyname', 'email', 'password_old', 'password_new', 'password_confirm']);
+    if (sizeof($data) == 0) $json = ['error', 'Request is empty.'];
+    else $json = $userRepository->updateUser($userId, $data);
+
+    $response = $response->withJson($json);
+    return $response;
+})->add($oauth_resource_server_middleware);
+
+$app->any('/test', function(Request $request, Response $response) {
+    $json = [
+        'oauth_access_token_id' => $request->getAttribute('oauth_access_token_id'),
+        'oauth_client_id' => $request->getAttribute('oauth_client_id'),
+        'oauth_user_id' => $request->getAttribute('oauth_user_id'),
+        'oauth_scopes' => $request->getAttribute('oauth_scopes'),
+    ];
+    $response = $response->withJson($json);
     return $response;
 })->add($oauth_resource_server_middleware);
 

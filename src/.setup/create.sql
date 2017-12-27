@@ -38,7 +38,13 @@ CREATE TABLE auth3_access_tokens (
 	access_token VARCHAR(128),
 	access_token_raw VARCHAR(512),
 	scopes VARCHAR(2048),
-	is_revoked TINYINT(1) DEFAULT 0,
+	is_revoked TINYINT(1) DEFAULT '0',
+	ip_address CHAR(16),
+	browser VARCHAR(64),
+	operating_system VARCHAR(64),
+	country VARCHAR(128),
+	created TIMESTAMP
+		DEFAULT CURRENT_TIMESTAMP,
 	expires TIMESTAMP 
 		DEFAULT CURRENT_TIMESTAMP
 		ON UPDATE CURRENT_TIMESTAMP,
@@ -93,6 +99,21 @@ CREATE TABLE auth3_scopes (
 	id INT NOT NULL AUTO_INCREMENT,
 	name varchar(80),
 	is_default TINYINT(1) DEFAULT 0,
+	PRIMARY KEY (id)
+) charset=utf8 ENGINE=INNODB;
+
+CREATE TABLE auth3_history (
+	id INT NOT NULL AUTO_INCREMENT,
+	namespace VARCHAR(24),
+	action VARCHAR(24),
+	user_id INT,
+	detail VARCHAR(128),
+	time TIMESTAMP
+		DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id)
+		REFERENCES auth3_users(id)
+		ON DELETE CASCADE
+		ON UPDATE CASCADE,
 	PRIMARY KEY (id)
 ) charset=utf8 ENGINE=INNODB;
 

@@ -24,7 +24,7 @@ class ScopeRepository implements ScopeRepositoryInterface {
         if ($scopes = $stmt->fetchAll()) {
 
             foreach ($scopes as $scope) {
-                if ($scope['name'] === $identifier) {
+                if ($scope['name'] == $identifier) {
                     return new ScopeEntity($identifier);
                 }
             }

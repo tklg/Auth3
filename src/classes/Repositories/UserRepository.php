@@ -5,8 +5,9 @@ namespace Auth3\Repositories;
 use League\OAuth2\Server\Repositories\UserRepositoryInterface;
 use League\OAuth2\Server\Entities\ClientEntityInterface;
 use Auth3\Entities\UserEntity;
+use Auth3\Entities\ClientEntity;
 use Auth3\Database\Database;
-use Auth3\Captcha\Recaptcha;
+use Auth3\Util\Recaptcha;
 
 class UserRepository implements UserRepositoryInterface {
 
@@ -42,13 +43,14 @@ class UserRepository implements UserRepositoryInterface {
             $id = $user['id'];
             $firstname = $user['first_name'];
             $familyname = $user['family_name'];
+            $joindate = $user['join_date'];
             $password_hash = $user['password'];
             $gAuthCode = $user['twofactor'];
             $hasTwoFactor = $gAuthCode != '';
             $verified = $user['verification_status'] == 'verified';
 
     		if (password_verify($password, $password_hash)) {
-    			return new UserEntity($id, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified);
+    			return new UserEntity($id, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
     		}
 
     	}
@@ -69,11 +71,12 @@ class UserRepository implements UserRepositoryInterface {
             $username = $user['email'];
             $firstname = $user['first_name'];
             $familyname = $user['family_name'];
+            $joindate = $user['join_date'];
             $gAuthCode = $user['twofactor'];
             $hasTwoFactor = $gAuthCode != '';
             $verified = $user['verification_status'] == 'verified';
             
-            return new UserEntity($identifier, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified);
+            return new UserEntity($identifier, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
         }
         return null;
     }
@@ -93,11 +96,12 @@ class UserRepository implements UserRepositoryInterface {
             $username = $user['email'];
             $firstname = $user['first_name'];
             $familyname = $user['family_name'];
+            $joindate = $user['join_date'];
             $gAuthCode = $user['twofactor'];
             $hasTwoFactor = $gAuthCode != '';
             $verified = $user['verification_status'] == 'verified';
             
-            return new UserEntity($identifier, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified);
+            return new UserEntity($identifier, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
         }
         return null;
     }
@@ -131,6 +135,50 @@ class UserRepository implements UserRepositoryInterface {
             'error' => 'success',
             'user' => $this->getUserEntityByEmail($email)
         ];
+    }
+
+    public function updateUser($id, $data) {
+        $user = $this->getUserEntityByIdentifier($id);
+        if ($user == null) return ['error' => 'That account does not exist.'];
+
+
+        $db = Database::getDatabase();
+        // update user name
+        if (isset($data['firstname']) && isset($data['familyname'])) {
+            $firstname = $data['firstname'];
+            $familyname = $data['familyname'];
+            $query = "UPDATE auth3_users SET first_name = :firstname, family_name = :familyname WHERE id = :id LIMIT 1";
+            $qdata = compact('firstname', 'familyname', 'id');
+        } else if (isset($data['email'])) { // update email
+            $email = $data['email'];
+            $query = "UPDATE auth3_users SET email = :email WHERE id = :id LIMIT 1";
+            $qdata = compact('email', 'id');
+            $event = new \Auth3\Entities\EventLogEntity('user', 'email', $_SERVER['REMOTE_ADDR'] . ' changed to ' . $email, $user->getIdentifier());
+        } else if (isset($data['password_old']) && isset($data['password_new']) && isset($data['password_confirm'])) { // check and update password
+            // not good, fix
+            if ($this->getUserEntityByUserCredentials($user->getEmail(), $data['password_old'], null, new ClientEntity(null, null, null)) == null) return ['error' => 'Password is incorrect.'];
+            if ($data['password_new'] != $data['password_confirm']) return ['error' => 'Passwords do not match.'];
+
+            $hashedpassword = password_hash($data['password_new'], PASSWORD_DEFAULT);
+            $query = "UPDATE auth3_users SET password = :hashedpassword WHERE id = :id LIMIT 1";
+            $qdata = compact('hashedpassword', 'id');
+            $event = new \Auth3\Entities\EventLogEntity('user', 'password', $_SERVER['REMOTE_ADDR'], $user->getIdentifier());
+        }
+        if (isset($event)) {
+            $logRepository = new \Auth3\Repositories\EventLogRepository();
+            $logRepository->addEvent($event);
+        }
+        try {
+            $stmt = $db->prepare($query);
+            $stmt->execute($qdata);
+            return [
+                'message' => 'User info updated.'
+            ];
+        } catch (PDOException $e) {
+            return [
+                'error' => $e
+            ];
+        }
     }
 
 }

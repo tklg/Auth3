@@ -74,7 +74,7 @@ class RefreshTokenRepository implements RefreshTokenRepositoryInterface {
         $db = Database::getDatabase();
         $tokenId = hash('sha512', $tokenId);
 
-        $stmt = $db->prepare("SELECT is_revoked FROM auth3_refresh_tokens WHERE access_token = :tokenId LIMIT 1");
+        $stmt = $db->prepare("SELECT is_revoked FROM auth3_refresh_tokens WHERE refresh_token = :tokenId LIMIT 1");
         $stmt->execute(compact('tokenId'));
         if ($token = $stmt->fetch()) {
             if ($token['is_revoked'] === 1) return true;

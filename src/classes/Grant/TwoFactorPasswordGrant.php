@@ -120,6 +120,9 @@ class TwoFactorPasswordGrant extends \League\OAuth2\Server\Grant\AbstractGrant {
             return $user;
         }
 
+        $logRepository = new \Auth3\Repositories\EventLogRepository();
+        $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'login', $_SERVER['REMOTE_ADDR'], $user->getIdentifier()));
+
         return $user;
     }
 
