@@ -46,7 +46,7 @@ class UserRepository implements UserRepositoryInterface {
             $joindate = $user['join_date'];
             $password_hash = $user['password'];
             $gAuthCode = $user['twofactor'];
-            $hasTwoFactor = $gAuthCode != '';
+            $hasTwoFactor = $user['using_twofactor'] == 1;
             $verified = $user['verification_status'] == 'verified';
 
     		if (password_verify($password, $password_hash)) {
@@ -73,7 +73,7 @@ class UserRepository implements UserRepositoryInterface {
             $familyname = $user['family_name'];
             $joindate = $user['join_date'];
             $gAuthCode = $user['twofactor'];
-            $hasTwoFactor = $gAuthCode != '';
+            $hasTwoFactor = $user['using_twofactor'] == 1;
             $verified = $user['verification_status'] == 'verified';
             
             return new UserEntity($identifier, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
@@ -98,7 +98,7 @@ class UserRepository implements UserRepositoryInterface {
             $familyname = $user['family_name'];
             $joindate = $user['join_date'];
             $gAuthCode = $user['twofactor'];
-            $hasTwoFactor = $gAuthCode != '';
+            $hasTwoFactor = $user['using_twofactor'] == 1;
             $verified = $user['verification_status'] == 'verified';
             
             return new UserEntity($identifier, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
@@ -141,7 +141,6 @@ class UserRepository implements UserRepositoryInterface {
         $user = $this->getUserEntityByIdentifier($id);
         if ($user == null) return ['error' => 'That account does not exist.'];
 
-
         $db = Database::getDatabase();
         // update user name
         if (isset($data['firstname']) && isset($data['familyname'])) {
@@ -173,6 +172,44 @@ class UserRepository implements UserRepositoryInterface {
             $stmt->execute($qdata);
             return [
                 'message' => 'User info updated.'
+            ];
+        } catch (PDOException $e) {
+            return [
+                'error' => $e
+            ];
+        }
+    }
+
+    public function setTwoFactorForUser($id, $secret) {
+        $user = $this->getUserEntityByIdentifier($id);
+        if ($user == null) return ['error' => 'That account does not exist.'];
+
+        $db = Database::getDatabase();
+        $stmt = $db->prepare("UPDATE auth3_users SET twofactor = :secret WHERE id = :id LIMIT 1");
+        try {
+            $stmt->execute(compact('secret', 'id'));
+            return [
+                'message' => 'User twofactor updated.'
+            ];
+        } catch (PDOException $e) {
+            return [
+                'error' => $e
+            ];
+        }
+    }
+
+    public function setUsingTwoFactorForUser($id, $val) {
+        $user = $this->getUserEntityByIdentifier($id);
+        if ($user == null) return ['error' => 'That account does not exist.'];
+
+        $val = $val ? '1' : '0';
+
+        $db = Database::getDatabase();
+        $stmt = $db->prepare("UPDATE auth3_users SET using_twofactor = :val WHERE id = :id LIMIT 1");
+        try {
+            $stmt->execute(compact('val', 'id'));
+            return [
+                'message' => 'User using_twofactor updated.'
             ];
         } catch (PDOException $e) {
             return [

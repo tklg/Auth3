@@ -6,6 +6,7 @@ CREATE TABLE auth3_users (
 	family_name VARCHAR(128),
 	#g_authcode VARCHAR(64),
 	twofactor VARCHAR(16) DEFAULT NULL,		# contains g_authcode if yes, else nothing
+	using_twofactor TINYINT DEFAULT '0',
 	verification_status VARCHAR(40) DEFAULT 'false',
 	join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY (id)
@@ -114,6 +115,16 @@ CREATE TABLE auth3_history (
 		REFERENCES auth3_users(id)
 		ON DELETE CASCADE
 		ON UPDATE CASCADE,
+	PRIMARY KEY (id)
+) charset=utf8 ENGINE=INNODB;
+
+CREATE TABLE auth3_recovery_codes (
+	id INT NOT NULL AUTO_INCREMENT,
+	user_id INT,
+	code CHAR(10),
+	FOREIGN KEY (user_id)
+		REFERENCES auth3_users(id)
+		ON DELETE CASCADE,
 	PRIMARY KEY (id)
 ) charset=utf8 ENGINE=INNODB;
 

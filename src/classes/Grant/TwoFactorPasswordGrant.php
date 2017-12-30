@@ -85,6 +85,8 @@ class TwoFactorPasswordGrant extends \League\OAuth2\Server\Grant\AbstractGrant {
             throw OAuthServerException::invalidRequest('password');
         }
 
+        $logRepository = new \Auth3\Repositories\EventLogRepository();
+
         $user = $this->userRepository->getUserEntityByUserCredentials(
             $username,
             $password,
@@ -92,6 +94,7 @@ class TwoFactorPasswordGrant extends \League\OAuth2\Server\Grant\AbstractGrant {
             $client
         );
         if ($user instanceof UserEntityInterface === false) {
+            $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'login-fail', $_SERVER['REMOTE_ADDR'] . ' provided invalid credentials', $this->userRepository->getUserEntityByEmail($username)->getIdentifier()));
             $this->getEmitter()->emit(new RequestEvent(RequestEvent::USER_AUTHENTICATION_FAILED, $request));
             throw OAuthServerException::invalidCredentials();
         }
@@ -104,9 +107,8 @@ class TwoFactorPasswordGrant extends \League\OAuth2\Server\Grant\AbstractGrant {
             if (is_null($authcode)) {
                 throw Auth3Exception::invalidTwoFactor('missing');
             }
-            $authcode = preg_replace('/[^a-zA-Z]/', '', $authcode);
-
-            if (strlen($authcode) !== 6) {
+            $authcode = preg_replace('/[^0-9]/', '', $authcode);
+            if (strlen($authcode) != 6) {
                 throw Auth3Exception::invalidTwoFactor('length');
             }
 
@@ -114,15 +116,15 @@ class TwoFactorPasswordGrant extends \League\OAuth2\Server\Grant\AbstractGrant {
             $g = new \GAuth\Auth($user->getGoogleAuthenticatorCode());
             $verify = $g->validateCode($authcode);
             if (!$verify) {
+                $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'login-fail', $_SERVER['REMOTE_ADDR'] . ' provided invalid 2-factor code', $user->getIdentifier()));
                 $this->getEmitter()->emit(new RequestEvent(RequestEvent::USER_AUTHENTICATION_FAILED, $request));
                 throw Auth3Exception::invalidTwoFactor('verify');
             }
+            $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'login', $_SERVER['REMOTE_ADDR'], $user->getIdentifier()));
             return $user;
         }
 
-        $logRepository = new \Auth3\Repositories\EventLogRepository();
         $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'login', $_SERVER['REMOTE_ADDR'], $user->getIdentifier()));
-
         return $user;
     }
 

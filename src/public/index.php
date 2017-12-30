@@ -280,7 +280,8 @@ $app->get('/api/user/info', function(Request $request, Response $response) {
             'familyname' => $userData->getFamilyname(),
             'email' => $userData->getEmail(),
             'image' => 'https://www.gravatar.com/avatar/'.md5($userData->getEmail()).'?d=retro&r=r',
-            'joindate' => $userData->getJoinDate()
+            'joindate' => $userData->getJoinDate(),
+            'verified' => $userData->getEmailVerification() == 'verified' ? 'verified' : 'not verified'
         ];
     } else {
         $json = [
@@ -319,9 +320,13 @@ $app->get('/api/user/security', function(Request $request, Response $response) {
 *   return user's authorized applications
 */
 $app->get('/api/user/applications', function(Request $request, Response $response) {
-    $userRepository = new \Auth3\Repositories\UserRepository();
-
-    $json = [];
+    $appRepository = new \Auth3\Repositories\ClientRepository();
+    $userId = $request->getAttribute('oauth_user_id');
+    $apps = $appRepository->getClientsAuthorizedByUser($userId);
+    if ($apps == null) $apps = [];
+    $json = [
+        'applications' => $apps
+    ];
 
     $response = $response->withJson($json);
     return $response;
@@ -348,6 +353,119 @@ $app->post('/api/user/info', function(Request $request, Response $response) {
 
     $response = $response->withJson($json);
     return $response;
+})->add($oauth_resource_server_middleware);
+
+/**
+*   get two-factor qr data before enabling 2fa
+*/
+$app->get('/api/user/security/twofactor', function(Request $request, Response $response) {
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $userId = $request->getAttribute('oauth_user_id');
+    $userData = $userRepository->getUserEntityByIdentifier($userId);
+    $size = $request->getParam('size');
+    if ($size == null) {
+        $size = 30;
+    }
+    
+    if ($userData->hasTwoFactor()) {
+        $json = [
+            'error' => 'Two-factor authentication is already enabled for this user.'
+        ];
+    } else {
+        $g = new \GAuth\Auth();
+
+        $secret = $userData->getGoogleAuthenticatorCode();
+        if ($secret == '') {
+            $secret = $g->generateCode();
+            // set twofactor in auth3_users to a new unique code
+            $userRepository->setTwoFactorForUser($userId, $secret);
+        }
+        $g->setInitKey($secret);
+        $qrImage = \Auth3\Util\TwoFactor::generateQrImage($userData->getEmail(), 'Auth3', $g->getInitKey(), $size);
+        $json = [
+            'qr_image' => 'data:image/png;base64,'.base64_encode($qrImage),
+            'qr_secret' => $secret
+        ];
+    }
+
+    $response = $response->withJson($json);
+    return $response;
+})->add($oauth_resource_server_middleware);
+
+$app->post('/api/user/security/twofactor', function(Request $request, Response $response) {
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $logRepository = new \Auth3\Repositories\EventLogRepository();
+    $userId = $request->getAttribute('oauth_user_id');
+    $userData = $userRepository->getUserEntityByIdentifier($userId);
+
+    $authcode = $request->getParsedBodyParam('authcode');
+    $secret = $userData->getGoogleAuthenticatorCode();
+    if ($secret == '') {
+        $json = [
+            'error' => "This user does not have a twofactor secret."
+        ];
+    } else if (strlen($authcode) != 6) {
+        $json = [
+            'error' => "Auth code is incorrectly formatted."
+        ];
+    } else {
+        $g = new \GAuth\Auth($secret);
+        if (!$g->validateCode($authcode)) {
+            $json = [
+                'error' => "Auth code is invalid."
+            ];
+        } else {
+            $codes = \Auth3\Util\TwoFactor::generateRecoveryCodes(10);
+            $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
+            if ($codeRepository->addCodesForUser($userId, $codes)) {
+                $userRepository->setUsingTwoFactorForUser($userId, true);
+                $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'twofactor', $_SERVER['REMOTE_ADDR'] . ' enabled 2-factor authentication', $userId));
+                $json = [
+                    'recovery_codes' => $codes
+                ];
+            } else {
+                $json = [
+                    'error' => "Failed to set recovery codes"
+                ];
+            }
+        }
+    }
+    return $response->withJson($json);
+})->add($oauth_resource_server_middleware);
+
+$app->delete('/api/user/security/twofactor', function(Request $request, Response $response) {
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $logRepository = new \Auth3\Repositories\EventLogRepository();
+    $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
+    $userId = $request->getAttribute('oauth_user_id');
+    $userData = $userRepository->getUserEntityByIdentifier($userId);
+
+    //$authcode = $request->getParsedBodyParam('authcode');
+    $secret = $userData->getGoogleAuthenticatorCode();
+    if ($secret == '') {
+        $json = [
+            'error' => "This user does not have a twofactor secret."
+        ];
+    } else {
+        $userRepository->setTwoFactorForUser($userId, '');
+        $userRepository->setUsingTwoFactorForUser($userId, false);
+        $codeRepository->removeCodesForUser($userId);
+        $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'twofactor', $_SERVER['REMOTE_ADDR'] . ' disabled 2-factor authentication', $userId));
+        $json = [
+            'message' => "Twofactor disabled."
+        ];
+    }
+    return $response->withJson($json);
+})->add($oauth_resource_server_middleware);
+
+$app->get('/api/user/security/twofactor/codes', function(Request $request, Response $response) {
+    $userId = $request->getAttribute('oauth_user_id');
+    $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
+    $codes = $codeRepository->getCodesForUser($userId);
+    $json = [
+        'recovery_codes' => $codes
+    ];
+    return $response->withJson($json);
 })->add($oauth_resource_server_middleware);
 
 $app->any('/test', function(Request $request, Response $response) {

@@ -133,7 +133,7 @@ class AccessTokenRepository implements AccessTokenRepositoryInterface {
     public function getAccessTokensByUserId($userId, $currentTokenId = '') {
         $db = Database::getDatabase();
 
-        $stmt = $db->prepare("SELECT at.id, at.client_id, cl.client_display, at.ip_address as ip, at.browser, at.operating_system as os, at.country, at.scopes, at.created, at.expires ".
+        $stmt = $db->prepare("SELECT at.id, at.client_id, cl.client_display as name, at.ip_address as ip, at.browser, at.operating_system as os, at.country, at.scopes, at.created, at.expires ".
                              "FROM auth3_access_tokens at, auth3_clients cl ".
                              "WHERE at.client_id = cl.id AND at.is_revoked = 0 AND at.user_id = :userId AND at.expires > NOW() ".
                              "ORDER BY at.expires ASC");

@@ -26,17 +26,30 @@ class ClientRepository implements ClientRepositoryInterface {
 
         if ($client = $stmt->fetch()) {
 
-           $availableGrantTypes = $client['grant_types'];
-           $secret = $client['client_secret'];
-           $redirectUri = $client['redirect_uri'];
-           $clientDisplayName = $client['client_display'];
-           $clientID = $client['id'];
+            $availableGrantTypes = $client['grant_types'];
+            $secret = $client['client_secret'];
+            $redirectUri = $client['redirect_uri'];
+            $clientDisplayName = $client['client_display'];
+            $clientID = $client['id'];
+            if ($mustValidateSecret && $secret !== $clientSecret) return null;
+            if ($this->isGrantTypeIncluded($grantType, $availableGrantTypes)) {
+                 return new ClientEntity($clientID, $clientDisplayName, $redirectUri);
+            }
+        }
+        return null;
+    }
 
-           if ($mustValidateSecret && $secret !== $clientSecret) return null;
+    /**
+    *   get all clients and scopes with access to a user's account
+    */
+    public function getClientsAuthorizedByUser($userId) {
+        $db = Database::getDatabase(); // pdo instance
 
-           if ($this->isGrantTypeIncluded($grantType, $availableGrantTypes)) {
-                return new ClientEntity($clientID, $clientDisplayName, $redirectUri);
-           }
+        $stmt = $db->prepare("SELECT at.scopes, at.id as token_id, MAX(at.created) as date, cl.client_display as name FROM auth3_access_tokens at, auth3_clients cl WHERE at.user_id = :userId AND at.client_id = cl.id AND at.is_revoked = 0 AND at.expires > NOW() GROUP BY cl.id ORDER BY date ASC");
+        $stmt->execute(compact('userId'));
+
+        if ($clients = $stmt->fetchAll()) {
+            return $clients;
         }
         return null;
     }

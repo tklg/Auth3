@@ -27,7 +27,7 @@ class EventLogRepository {
 	public function getEventsByUserId($userId) {
 		$db = Database::getDatabase();
 
-        $stmt = $db->prepare("SELECT e.namespace, e.action, e.detail, e.time FROM auth3_history e WHERE e.user_id = :userId LIMIT 50");
+        $stmt = $db->prepare("SELECT e.namespace, e.action, e.detail, e.time FROM auth3_history e WHERE e.user_id = :userId ORDER BY e.time DESC LIMIT 50");
         $stmt->execute(compact('userId'));
 
         if ($tokens = $stmt->fetchAll()) {
