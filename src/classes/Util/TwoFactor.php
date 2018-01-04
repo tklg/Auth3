@@ -42,7 +42,8 @@ class TwoFactor {
         $codes = [];
         for ($i = 0; $i < $num; $i++) {
           $code = TwoFactor::generateToken(10);
-          $codes[] = preg_replace('/(.{5})(.{5})/', "$1-$2", $code);
+          //$codes[] = preg_replace('/(.{5})(.{5})/', "$1-$2", $code);
+          $codes[] = $code;
           ///$todb[] = "('".$email."','".$codes[$i]."')";
         }
         return $codes;

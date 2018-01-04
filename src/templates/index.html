@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en-US">
+	<head>
+		<meta charset="utf-8" />
+		<meta author="tkluge" />
+		<meta name="viewport" content="initial-scale=1, width=device-width, maximum-scale=1, minimum-scale=1, user-scalable=no">
+		<link href='https://fonts.googleapis.com/css?family=Roboto:300,400' rel='stylesheet' type='text/css'>
+		<link rel="stylesheet" type="text/css" href="./css/login.css">
+		<meta name="theme-color" content="#225378">
+		<title>Sign in</title>
+	</head>
+	<body>
+		<div class="bg-panel"></div>
+		<div id="root">
+			<div class="login" id="modal">
+				<div class="progress">
+			    	<div class="indeterminate"></div>
+			  	</div>
+				<section class="input-carousel">
+					<div class="carousel-container" id="carousel-container" data-offset="0">
+
+						<div class="carousel-item">
+							<header class="modal-header">
+								<h1>Sign in</h1>
+							</header>
+							<div class="underlined-input">
+								<input type="email" name="email" id="email-input" />
+								<div class="reacts-to">
+									<label class="input-placeholder">Email</label>
+									<div class="input-underline">
+										<div class="input-underline-fill"></div>
+									</div>
+								</div>
+							</div>
+							<span class="carousel-input-error" id="email-error">&emsp;</span>
+							<div class="button-row">
+								<a href="signup">Create account</a>
+								<button class="btn btn-primary" id="btn-next">
+								Next
+								<link class="rippleJS">
+								</button>
+							</div>
+							<div class="footer-row">
+								<!-- or
+								<a href="#">Sign in with your Google account</a> -->
+							</div>
+						</div>
+
+						<div class="carousel-item">
+							<header class="modal-header">
+								<h1>Welcome</h1>
+								<section class="account-banner">
+									<img src="https://placehold.it/50x50" alt="user profile image" id="card-image" />
+									<div class="info-stack">
+										<span class="name" id="card-name">firstname lastname</span>
+										<span class="email" id="card-email">x@y.z</span>
+									</div>
+									<a href="#" id="btn-reset">Not you?</a>
+								</section>
+							</header>
+							<div class="underlined-input">
+								<input type="password" name="password" id="password-input" />
+								<div class="reacts-to">
+									<label class="input-placeholder">Password</label>
+									<div class="input-underline">
+										<div class="input-underline-fill"></div>
+									</div>
+								</div>
+							</div>
+							<span class="carousel-input-error" id="password-error">&emsp;</span>
+							<div class="button-row">
+								<a href="forgot">Forgot password?</a>
+								<button class="btn btn-primary" id="btn-finish">
+								Sign in
+								<link class="rippleJS">
+								</button>
+							</div>
+						</div>
+
+						<div class="carousel-item">
+							<header class="modal-header">
+								<h1>Two factor</h1>
+								<section class="account-banner">
+									<p>
+										Enter the code from your mobile device, or use a recovery code.
+									</p>
+								</section>
+							</header>
+							<div class="underlined-input">
+								<input type="text" name="authcode" id="authcode-input" />
+								<div class="reacts-to">
+									<label class="input-placeholder">Auth code</label>
+									<div class="input-underline">
+										<div class="input-underline-fill"></div>
+									</div>
+								</div>
+							</div>
+							<span class="carousel-input-error" id="authcode-error">&emsp;</span>
+							<div class="button-row">
+								<button class="btn btn-primary" id="btn-authcode">
+								Sign in
+								<link class="rippleJS">
+								</button>
+							</div>
+						</div>
+
+					</div>
+				</section>
+			</div>
+		</div>
+		<footer class="footer">
+			<a href="about/terms">Terms</a>
+			<a href="about/privacy">Privacy</a>
+			<a href="about/help">Help</a>
+		</footer>
+	</body>
+	<script type="text/javascript" src="./js/login.bundle.js"></script>
+</html>

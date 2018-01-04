@@ -44,13 +44,44 @@ class RecoveryCodeRepository {
 		}
 	}
 
+	public function removeCodeForUser($userId, $code) {
+		$db = Database::getDatabase();
+		$stmt = $db->prepare("DELETE FROM auth3_recovery_codes WHERE user_id = :userId AND code = :code");
+		try {
+			$stmt->execute(compact('userId', 'code'));
+			return [
+				'message' => 'removed recovery code.'
+			];
+		} catch (PDOException $e) {
+			return null;
+		}
+	}
+
 	public function getCodesForUser($userId) {
 		$db = Database::getDatabase();
 		$stmt = $db->prepare("SELECT code FROM auth3_recovery_codes WHERE user_id = :userId");
 		$stmt->execute(compact('userId'));
 		if ($codes = $stmt->fetchAll()) {
-			return $codes;
+			$list = [];
+			foreach ($codes as $code) {
+				$list[] = $code['code'];
+			}
+			return $list;
 		}
 		return null;
+	}
+
+	public function validateCodeForUser($userId, $code) {
+		$db = Database::getDatabase();
+		$stmt = $db->prepare("SELECT code FROM auth3_recovery_codes WHERE user_id = :userId");
+		$stmt->execute(compact('userId'));
+		$list = [];
+		if ($codes = $stmt->fetchAll()) {
+			foreach ($codes as $c) {
+				$list[] = $c['code'];
+			}
+			return in_array($code, $list);
+		}
+		return false;
 	}
 }

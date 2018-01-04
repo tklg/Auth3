@@ -18,7 +18,7 @@ class AuthCodeRepository implements AuthCodeRepositoryInterface {
      * @return AuthCodeEntityInterface
      */
     public function getNewAuthCode() {
-        return new AuthCodeEntity();
+        return new AuthCodeEntity('');
     }
 
     /**
@@ -29,21 +29,21 @@ class AuthCodeRepository implements AuthCodeRepositoryInterface {
      * @throws UniqueTokenIdentifierConstraintViolationException
      */
     public function persistNewAuthCode(AuthCodeEntityInterface $authCodeEntity) {
-        $db = Database::getDatebase();
+        $db = Database::getDatabase();
 
         $scopes = $authCodeEntity->getScopes();
-        $scopeStrings = [];
+        /*$scopeStrings = [];
         for ($i = 0; $i < count($scopes); $i++) {
             $scopeStrings[] = $scopes[$i]->getIdentifier();
-        }
-        $scopes = join(',', $scopeStrings);
+        }*/
+        $scopes = join(',', $scopes);
 
         $clientId = $authCodeEntity->getClient()->getIdentifier();
         $userId = $authCodeEntity->getUserIdentifier();
         $authCode = hash('sha512', $authCodeEntity->getIdentifier());
         $expires = $authCodeEntity->getExpiryDateTime()->format('Y-m-d H:i:s');
 
-        $stmt = $db->prepare("INSERT INTO auth3_authorization_codes (user_id, client_id, authorization_code, expires, scopes) VALUES (:userId, :clientId :authCode, :expires, :scopes)");
+        $stmt = $db->prepare("INSERT INTO auth3_authorization_codes (user_id, client_id, authorization_code, expires, scopes) VALUES (:userId, :clientId, :authCode, :expires, :scopes)");
 
         try {
            $stmt->execute(compact('userId', 'clientId', 'authCode', 'expires', 'scopes'));

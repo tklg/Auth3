@@ -104,21 +104,36 @@ class TwoFactorPasswordGrant extends \League\OAuth2\Server\Grant\AbstractGrant {
         if ($user->hasTwoFactor()) {
 
             $authcode = $this->getRequestParameter('authcode', $request);
+            $usingRecovery = false;
             if (is_null($authcode)) {
                 throw Auth3Exception::invalidTwoFactor('missing');
             }
-            $authcode = preg_replace('/[^0-9]/', '', $authcode);
-            if (strlen($authcode) != 6) {
-                throw Auth3Exception::invalidTwoFactor('length');
+            $authcode = preg_replace('/[^0-9a-zA-Z]/', '', $authcode);
+            if (strlen($authcode) != 6) { // not a 6-digit code
+                if (strlen($authcode) != 10) {// also not a recovery code
+                    throw Auth3Exception::invalidTwoFactor('length');
+                } else { // using a recovery code, so validate it here
+                    $usingRecovery = true;
+                    $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
+                    if (!$codeRepository->validateCodeForUser($user->getIdentifier(), $authcode)) {
+                        $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'login-fail', $_SERVER['REMOTE_ADDR'] . ' provided invalid 2-factor recovery', $user->getIdentifier()));
+                        $this->getEmitter()->emit(new RequestEvent(RequestEvent::USER_AUTHENTICATION_FAILED, $request));
+                        throw Auth3Exception::invalidTwoFactor('verify');
+                    } else {
+                        $codeRepository->removeCodeForUser($user->getIdentifier(), $authcode);
+                    }
+                }
             }
 
-            // check to see if authcode is valid
-            $g = new \GAuth\Auth($user->getGoogleAuthenticatorCode());
-            $verify = $g->validateCode($authcode);
-            if (!$verify) {
-                $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'login-fail', $_SERVER['REMOTE_ADDR'] . ' provided invalid 2-factor code', $user->getIdentifier()));
-                $this->getEmitter()->emit(new RequestEvent(RequestEvent::USER_AUTHENTICATION_FAILED, $request));
-                throw Auth3Exception::invalidTwoFactor('verify');
+            if (!$usingRecovery) {
+                // check to see if authcode is valid if not using a recovery code
+                $g = new \GAuth\Auth($user->getGoogleAuthenticatorCode());
+                $verify = $g->validateCode($authcode);
+                if (!$verify) {
+                    $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'login-fail', $_SERVER['REMOTE_ADDR'] . ' provided invalid 2-factor code', $user->getIdentifier()));
+                    $this->getEmitter()->emit(new RequestEvent(RequestEvent::USER_AUTHENTICATION_FAILED, $request));
+                    throw Auth3Exception::invalidTwoFactor('verify');
+                }
             }
             $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'login', $_SERVER['REMOTE_ADDR'], $user->getIdentifier()));
             return $user;

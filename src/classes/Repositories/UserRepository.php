@@ -47,7 +47,7 @@ class UserRepository implements UserRepositoryInterface {
             $password_hash = $user['password'];
             $gAuthCode = $user['twofactor'];
             $hasTwoFactor = $user['using_twofactor'] == 1;
-            $verified = $user['verification_status'] == 'verified';
+            $verified = $user['verification_status'];
 
     		if (password_verify($password, $password_hash)) {
     			return new UserEntity($id, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
@@ -74,7 +74,7 @@ class UserRepository implements UserRepositoryInterface {
             $joindate = $user['join_date'];
             $gAuthCode = $user['twofactor'];
             $hasTwoFactor = $user['using_twofactor'] == 1;
-            $verified = $user['verification_status'] == 'verified';
+            $verified = $user['verification_status'];
             
             return new UserEntity($identifier, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
         }
@@ -99,7 +99,7 @@ class UserRepository implements UserRepositoryInterface {
             $joindate = $user['join_date'];
             $gAuthCode = $user['twofactor'];
             $hasTwoFactor = $user['using_twofactor'] == 1;
-            $verified = $user['verification_status'] == 'verified';
+            $verified = $user['verification_status'];
             
             return new UserEntity($identifier, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
         }
@@ -146,10 +146,21 @@ class UserRepository implements UserRepositoryInterface {
         if (isset($data['firstname']) && isset($data['familyname'])) {
             $firstname = $data['firstname'];
             $familyname = $data['familyname'];
+            if ($firstname == $user->getFirstname() && $familyname == $user->getFamilyname()) { // if the name hasnt changed, dont do anything
+                return [
+                    'message' => 'User info not updated.'
+                ];
+            }
             $query = "UPDATE auth3_users SET first_name = :firstname, family_name = :familyname WHERE id = :id LIMIT 1";
             $qdata = compact('firstname', 'familyname', 'id');
         } else if (isset($data['email'])) { // update email
             $email = $data['email'];
+            if ($email == $user->getEmail()) { // if the email hasnt changed, dont do anything
+                return [
+                    'message' => 'User info not updated.'
+                ];
+            }
+            $this->setEmailVerificationForUser($id, false);
             $query = "UPDATE auth3_users SET email = :email WHERE id = :id LIMIT 1";
             $qdata = compact('email', 'id');
             $event = new \Auth3\Entities\EventLogEntity('user', 'email', $_SERVER['REMOTE_ADDR'] . ' changed to ' . $email, $user->getIdentifier());
@@ -210,6 +221,27 @@ class UserRepository implements UserRepositoryInterface {
             $stmt->execute(compact('val', 'id'));
             return [
                 'message' => 'User using_twofactor updated.'
+            ];
+        } catch (PDOException $e) {
+            return [
+                'error' => $e
+            ];
+        }
+    }
+
+    public function setEmailVerificationForUser($id, $val) {
+        $user = $this->getUserEntityByIdentifier($id);
+        //print_r($user);
+        if ($user == null) return ['error' => 'That account does not exist.'];
+
+        $val = $val ? 'verified' : (function_exists('random_bytes') ? bin2hex(random_bytes(20)) : bin2hex(openssl_random_pseudo_bytes(20)));
+
+        $db = Database::getDatabase();
+        $stmt = $db->prepare("UPDATE auth3_users SET verification_status = :val WHERE id = :id LIMIT 1");
+        try {
+            $stmt->execute(compact('val', 'id'));
+            return [
+                'message' => 'User verification_status updated.'
             ];
         } catch (PDOException $e) {
             return [

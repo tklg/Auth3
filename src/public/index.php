@@ -41,22 +41,31 @@ $container['db'] = function ($c) {
 };
 $container['view'] = new \Slim\Views\PhpRenderer("../templates/");
 $container['oauth_server'] = OAuth2::register([
-	"privateKey" => 'J:\BitNami\xampp\htdocs\auth3\keys\private.key',
+	"privateKey" => $config['privateKey'],
 	//"privateKeyPassPhrase" => "",
-	"encryptionKey" => '6kwILTHs88Z2dCWgoyc3gx5d8Dl7QGPBjrVfhixzsSE='
+	"encryptionKey" => $config['encryptionKey']
 ]);
 $oauth_resource_server_middleware = new \League\OAuth2\Server\Middleware\ResourceServerMiddleware(OAuth2Resource::register([
-	"publicKey" => 'J:\BitNami\xampp\htdocs\auth3\keys\public.key'
+	"publicKey" => $config['publicKey']
 ]));
 
 $app->get('/', function(Request $request, Response $response) {
-
-	$g = new \GAuth\Auth();
-	$code = $g->generateCode();
-	echo ($code);
-
-	$response = $this->view->render($response, "login.phtml");
-    return $response;
+	return $this->view->render($response, "index.html");
+});
+$app->get('/account', function(Request $request, Response $response) {
+    return $this->view->render($response, "account.html");
+});
+$app->get('/signup', function(Request $request, Response $response) {
+    return $this->view->render($response, "signup.html");
+});
+$app->get('/forgot', function(Request $request, Response $response) {
+    return $this->view->render($response, "forgot.html");
+});
+$app->get('/recover', function(Request $request, Response $response) {
+    return $this->view->render($response, "recover.html");
+});
+$app->get('/authorize', function(Request $request, Response $response) {
+    return $this->view->render($response, "authorize.html");
 });
 
 /** Create a new user
@@ -77,6 +86,19 @@ $app->post('/api/users/new', function(Request $request, Response $response) {
             'email' => $result['user']->getEmail(),
             'image' => 'https://www.gravatar.com/avatar/'.md5($result['user']->getEmail()).'?d=retro&r=r'
         ];
+        $email = new \Auth3\Util\Email();
+        $email->setTo($userData->getEmail());
+        $email->setFrom('Auth3 <auth3@tkluge.net>');
+        $email->setSubject('Email verification');
+        $link = 'http://'.$_SERVER['HTTP_HOST']."/api/verify?key=".$userData->getEmailVerification().'&from='.$userData->getEmail();
+        $email->setText('Hello, ' . $userData->getEmail() . '! Use this link to verify your email address: ' . $link);
+        try {
+            $result = $email->send();
+            $json['message'] = 'Email sent';
+            $json['mailgun_response'] = $result;
+        } catch (Exception $e) {
+            $json['error'] = $e->getMessage();
+        }
     }
     $response = $response->withJson($json);
 	return $response;
@@ -148,7 +170,23 @@ $app->delete('/api/token/{id}', function(Request $request, Response $response) {
     ];
     $response = $response->withJson($json);
     return $response;
-});
+})->add($oauth_resource_server_middleware);
+
+/** 
+*   delete all tokens for a client
+*/
+$app->delete('/api/client_token/{id}', function(Request $request, Response $response) {
+    $clientId = $request->getAttribute('id');
+    
+    $accessTokenRepository = new \Auth3\Repositories\AccessTokenRepository();
+    $accessTokenRepository->revokeAccessTokenByClientId($clientId, $request->getAttribute('oauth_user_id'));
+
+    $json = [
+        'message' => "Revoked access token(s)."
+    ];
+    $response = $response->withJson($json);
+    return $response;
+})->add($oauth_resource_server_middleware);
 
 /**
 * log the user out by revoking the current token
@@ -166,108 +204,110 @@ $app->get('/api/logout', function(Request $request, Response $response) {
     return $response;
 })->add($oauth_resource_server_middleware);
 
-/** 
-*   validate a token
-*/
-$app->map(['GET', 'POST'], '/api/token/validate', function(Request $request, Response $response) {
-	return $response;
-})->add($oauth_resource_server_middleware);
 /** Handle authorize request
 * GET -> [response_type, client_id, redirect_uri, scope, state]
 */
 $app->get('/api/authorize', function(Request $request, Response $response) {
 	$server = $this->oauth_server;
 
-	$authRequest = $server->validateAuthorizationRequest($request);
-        
-    // The auth request object can be serialized and saved into a user's session.
-    // You will probably want to redirect the user at this point to a login endpoint.    
-    session_name('AUTH3_SESSID');
-    session_start();
-
-    $_SESSION['authorization_code_request'] = $authRequest;
-
-    $clientRepository = new \Auth3\Repositories\ClientRepository();
-    //$client = $clientRepository->getClientEntity($clientId, $grantType, null, false);
-
-
-    //echo '<pre>';
-    //print_r($authRequest);
-    //var_dump($this->oauth_server);
-    
-    $response = $this->view->render($response, "authorize.phtml", []);
-    // At this point you should redirect the user to an authorization page.
-    // This form will ask the user to approve the client and the scopes requested.
-    return $response;
-});
-
-// requires resource server
-$app->post('/api/authorize/accept', function(Request $request, Response $response) {
-
-
-	session_name('AUTH3_SESSID');
-	session_start();
-	$authRequest = $_SESSION['authorization_code_request'];
-
-	/*echo '<pre>';
-    print_r($authRequest);
-    return;*/
-
-	/*
-	If the access token is valid the following attributes will be set on the ServerRequest:
-	oauth_access_token_id - the access token identifier
-	oauth_client_id - the client identifier
-	oauth_user_id - the user identifier represented by the access token
-	oauth_scopes - an array of string scope identifiers
-	*/
-
-	$user_id = $request['oauth_access_token_id'];
-
-	// Once the user has logged in set the user on the AuthorizationRequest
-	$userRepository = new \Auth3\Repositories\UserRepository();
-    $user = $userRepository->getUserEntityByIdentifier($user_id);
-    $authRequest->setUser($user); // an instance of UserEntityInterface
-    
-    // Once the user has approved or denied the client update the status
-    // (true = approved, false = denied)
-    $authRequest->setAuthorizationApproved(true);
-
-    // Return the HTTP redirect response
-    $res = $server->completeAuthorizationRequest($authRequest, $response);
-    $logRepository = new \Auth3\Repositories\EventLogRepository();
-    $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'auth', $_SERVER['REMOTE_ADDR'], $user->getIdentifier()));
-    unset($_SESSION['authorization_code_request']);
-    session_destroy();
-
-    return $res;
-})->add($oauth_resource_server_middleware);
-
-// requires resource server
-$app->post('/api/authorize/deny', function(Request $request, Response $response) {
-
-
-    session_name('AUTH3_SESSID');
-    session_start();
-    $authRequest = $_SESSION['authorization_code_request'];
-
-    $user_id = $request['oauth_access_token_id'];
-
+    $userId = $request->getAttribute('oauth_user_id');
     // Once the user has logged in set the user on the AuthorizationRequest
     $userRepository = new \Auth3\Repositories\UserRepository();
-    $authRequest->setUser($userRepository->getUserEntityByIdentifier($user_id)); // an instance of UserEntityInterface
-    
-    // Once the user has approved or denied the client update the status
-    // (true = approved, false = denied)
-    $authRequest->setAuthorizationApproved(false);
+    $clientRepository = new \Auth3\Repositories\ClientRepository();
+    try {
+        $authRequest = $server->validateAuthorizationRequest($request);
+        $user = $userRepository->getUserEntityByIdentifier($userId);
+        $client = $clientRepository->getClientEntityByName($request->getParam('client_id'));
+        if ($user == null) {
+            return $response->withJson(['error' => 'User does not exist'], 404);
+        } 
+        if ($client == null) {
+            return $response->withJson(['error' => 'Client does not exist'], 404);
+        }
+        $authRequest->setUser($user); // an instance of UserEntityInterface
+            
+        // The auth request object can be serialized and saved into a user's session.
+        // You will probably want to redirect the user at this point to a login endpoint.    
+        session_name('AUTH3_SESSID');
+        session_start();
 
-    // Return the HTTP redirect response
-    $res = $server->completeAuthorizationRequest($authRequest, $response);
-    unset($_SESSION['authorization_code_request']);
-    session_destroy();
-
-    return $res;
+        $_SESSION['auth3_authorization_code_request'] = $authRequest;
+        $_SESSION['auth3_user'] = $user;
+        $_SESSION['auth3_client'] = $client;
+        //$response = $this->view->render($response, "authorize.phtml", []);
+        $json = [
+            'session' => session_id(),
+            'application' => $client->getName(),
+            'scopes' => explode(" ", $request->getParam('scope'))
+        ];
+        // At this point you should redirect the user to an authorization page.
+        // This form will ask the user to approve the client and the scopes requested.
+        return $response->withJson($json);
+    } catch (\League\OAuth2\Server\Exception\OAuthServerException $exception) {
+        // dont actually return the redirect, as these are ajax requests
+        //return $exception->generateHttpResponse($response);
+        $client = $clientRepository->getClientEntityByName($request->getParam('client_id'));
+        if ($client == null) {
+            return $response->withJson(['error' => 'Client does not exist'], 404);
+        }
+        return $response->withJson([
+            'error' => $exception->getErrorType(), 
+            'message' => $exception->getMessage(),
+            'hint' => $exception->getHint(),
+            'redirect_uri' => $client->getRedirectUri()
+        ])->withStatus(500);
+    } 
 })->add($oauth_resource_server_middleware);
 
+/**
+*   Accept authorization request
+*/
+$app->get('/api/authorize/accept', function(Request $request, Response $response) {
+    $logRepository = new \Auth3\Repositories\EventLogRepository();
+    $server = $this->oauth_server;
+	session_name('AUTH3_SESSID');
+    session_id($request->getParam('session'));
+	session_start();
+	$authRequest = $_SESSION['auth3_authorization_code_request']; 
+    $user = $_SESSION['auth3_user'];
+    $client = $_SESSION['auth3_client'];
+    $authRequest->setAuthorizationApproved(true);
+    unset($_SESSION['auth3_authorization_code_request']);
+    unset($_SESSION['auth3_user']);
+    unset($_SESSION['auth3_client']);
+    session_destroy();
+    try {
+        $response = $server->completeAuthorizationRequest($authRequest, $response);
+        $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'auth', $_SERVER['REMOTE_ADDR'] . ' authorized ' . $client->getName(), $user->getIdentifier()));
+        return $response;
+    } catch (\League\OAuth2\Server\Exception\OAuthServerException $exception) {
+        return $exception->generateHttpResponse($response);
+    }
+});
+
+/**
+*   Deny authorization request
+*/
+$app->get('/api/authorize/deny', function(Request $request, Response $response) {
+    $server = $this->oauth_server;
+    session_name('AUTH3_SESSID');
+    session_id($request->getParam('session'));
+    session_start();
+    $authRequest = $_SESSION['auth3_authorization_code_request'];
+    $user = $_SESSION['auth3_user'];
+    $client = $_SESSION['auth3_client'];
+    $authRequest->setAuthorizationApproved(false);
+    unset($_SESSION['auth3_authorization_code_request']);
+    unset($_SESSION['auth3_user']);
+    unset($_SESSION['auth3_client']);
+    session_destroy();
+    try {
+        $response = $server->completeAuthorizationRequest($authRequest, $response);
+        return $response;
+    } catch (\League\OAuth2\Server\Exception\OAuthServerException $exception) {
+        return $exception->generateHttpResponse($response);
+    }
+});
 /** Check if user exists and fetch all account info
 * HEADER => [Authorization]
 */
@@ -279,7 +319,7 @@ $app->get('/api/user/info', function(Request $request, Response $response) {
             'firstname' => $userData->getFirstname(),
             'familyname' => $userData->getFamilyname(),
             'email' => $userData->getEmail(),
-            'image' => 'https://www.gravatar.com/avatar/'.md5($userData->getEmail()).'?d=retro&r=r',
+            'image' => 'https://www.gravatar.com/avatar/'.md5($userData->getEmail()).'?d=retro&r=r&s=60',
             'joindate' => $userData->getJoinDate(),
             'verified' => $userData->getEmailVerification() == 'verified' ? 'verified' : 'not verified'
         ];
@@ -392,7 +432,10 @@ $app->get('/api/user/security/twofactor', function(Request $request, Response $r
     return $response;
 })->add($oauth_resource_server_middleware);
 
-$app->post('/api/user/security/twofactor', function(Request $request, Response $response) {
+/**
+*   enable 2FA
+*/
+$app->post('/api/user/security/twofactor/enable', function(Request $request, Response $response) {
     $userRepository = new \Auth3\Repositories\UserRepository();
     $logRepository = new \Auth3\Repositories\EventLogRepository();
     $userId = $request->getAttribute('oauth_user_id');
@@ -401,51 +444,55 @@ $app->post('/api/user/security/twofactor', function(Request $request, Response $
     $authcode = $request->getParsedBodyParam('authcode');
     $secret = $userData->getGoogleAuthenticatorCode();
     if ($secret == '') {
-        $json = [
+        return $response->withJson([
             'error' => "This user does not have a twofactor secret."
-        ];
+        ], 401);
     } else if (strlen($authcode) != 6) {
-        $json = [
+        return $response->withJson([
             'error' => "Auth code is incorrectly formatted."
-        ];
+        ], 401);
     } else {
         $g = new \GAuth\Auth($secret);
         if (!$g->validateCode($authcode)) {
-            $json = [
+            return $response->withJson([
                 'error' => "Auth code is invalid."
-            ];
+            ], 401);
         } else {
             $codes = \Auth3\Util\TwoFactor::generateRecoveryCodes(10);
             $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
             if ($codeRepository->addCodesForUser($userId, $codes)) {
                 $userRepository->setUsingTwoFactorForUser($userId, true);
                 $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'twofactor', $_SERVER['REMOTE_ADDR'] . ' enabled 2-factor authentication', $userId));
-                $json = [
+                return $response->withJson([
                     'recovery_codes' => $codes
-                ];
+                ]);
             } else {
-                $json = [
+                return $response->withJson([
                     'error' => "Failed to set recovery codes"
-                ];
+                ], 500);
             }
         }
     }
-    return $response->withJson($json);
 })->add($oauth_resource_server_middleware);
 
-$app->delete('/api/user/security/twofactor', function(Request $request, Response $response) {
+/**
+*   disable 2FA
+*/
+$app->post('/api/user/security/twofactor/disable', function(Request $request, Response $response) {
     $userRepository = new \Auth3\Repositories\UserRepository();
     $logRepository = new \Auth3\Repositories\EventLogRepository();
     $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
     $userId = $request->getAttribute('oauth_user_id');
-    $userData = $userRepository->getUserEntityByIdentifier($userId);
-
-    //$authcode = $request->getParsedBodyParam('authcode');
-    $secret = $userData->getGoogleAuthenticatorCode();
-    if ($secret == '') {
-        $json = [
+    $user = $userRepository->getUserEntityByIdentifier($userId);
+    $password = $request->getParam('password');
+    $secret = $user->getGoogleAuthenticatorCode();
+    // not good, fix
+    if ($userRepository->getUserEntityByUserCredentials($user->getEmail(), $password, null, new \Auth3\Entities\ClientEntity(null, null, null)) == null) {
+        return $response->withJson(['error' => 'Password is incorrect.'], 401);
+    } else if ($secret == '') {
+        return $response->withJson([
             'error' => "This user does not have a twofactor secret."
-        ];
+        ], 401);
     } else {
         $userRepository->setTwoFactorForUser($userId, '');
         $userRepository->setUsingTwoFactorForUser($userId, false);
@@ -458,14 +505,143 @@ $app->delete('/api/user/security/twofactor', function(Request $request, Response
     return $response->withJson($json);
 })->add($oauth_resource_server_middleware);
 
-$app->get('/api/user/security/twofactor/codes', function(Request $request, Response $response) {
-    $userId = $request->getAttribute('oauth_user_id');
+/**
+*   fetch 2FA recovery codes
+*/
+$app->post('/api/user/security/twofactor/codes', function(Request $request, Response $response) {
     $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $userId = $request->getAttribute('oauth_user_id');
+    $password = $request->getParam('password');
+    $user = $userRepository->getUserEntityByIdentifier($userId);
+    $secret = $user->getGoogleAuthenticatorCode();
+    // not good, fix
+    if ($userRepository->getUserEntityByUserCredentials($user->getEmail(), $password, null, new \Auth3\Entities\ClientEntity(null, null, null)) == null) {
+        return $response->withJson(['error' => 'Password is incorrect.'], 401);
+    } else if ($secret == '') {
+        return $response->withJson([
+            'error' => "This user does not have a twofactor secret."
+        ], 401);
+    }
     $codes = $codeRepository->getCodesForUser($userId);
     $json = [
         'recovery_codes' => $codes
     ];
     return $response->withJson($json);
+})->add($oauth_resource_server_middleware);
+
+/**
+*   regenerate 2FA recovery codes
+*/
+$app->post('/api/user/security/twofactor/codes/regen', function(Request $request, Response $response) {
+    $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
+    $logRepository = new \Auth3\Repositories\EventLogRepository();
+
+    $userId = $request->getAttribute('oauth_user_id');
+    $password = $request->getParam('password');
+    $user = $userRepository->getUserEntityByIdentifier($userId);
+    $secret = $user->getGoogleAuthenticatorCode();
+    // not good, fix
+    if ($userRepository->getUserEntityByUserCredentials($user->getEmail(), $password, null, new \Auth3\Entities\ClientEntity(null, null, null)) == null) {
+        return $response->withJson(['error' => 'Password is incorrect.'], 401);
+    } else if ($secret == '') {
+        return $response->withJson([
+            'error' => "This user does not have a twofactor secret."
+        ], 401);
+    }
+    $codeRepository->removeCodesForUser($userId);
+    $codes = \Auth3\Util\TwoFactor::generateRecoveryCodes(10);
+    if ($codeRepository->addCodesForUser($userId, $codes)) {
+        $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'twofactor', $_SERVER['REMOTE_ADDR'] . ' regenerated recovery codes', $userId));
+        return $response->withJson([
+            'recovery_codes' => $codes
+        ]);
+    } else {
+        return $response->withJson([
+            'error' => "Failed to set recovery codes"
+        ], 500);
+    }
+})->add($oauth_resource_server_middleware);
+
+/**
+*   send email verification code to user's email
+*/
+$app->post('/api/sendverification', function(Request $request, Response $response) {
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $userId = $request->getAttribute('oauth_user_id');
+    $userData = $userRepository->getUserEntityByIdentifier($userId);
+
+    if ($userData->getEmail() == 'test@test.test') {
+        return $response->withJson(['error' => "Cannot verify the test email."], 401);
+    }
+
+    $email = new \Auth3\Util\Email();
+    $email->setTo($userData->getEmail());
+    $email->setFrom('Auth3 <auth3@tkluge.net>');
+    $email->setSubject('Email verification');
+    $link = 'http://'.$_SERVER['HTTP_HOST']."/api/verify?key=".$userData->getEmailVerification().'&from='.$userData->getEmail();
+    $email->setText('Hello, ' . $userData->getEmail() . '! Use this link to verify your email address: ' . $link);
+    try {
+        $result = $email->send();
+        $json = [
+            'message' => 'Email sent',
+            'mailgun_response' => $result
+        ];
+    } catch (Exception $e) {
+        $json = [
+            'error' => $e->getMessage()
+        ];
+        $response = $response->withStatus(500);
+    }
+    return $response->withJson($json);
+})->add($oauth_resource_server_middleware);
+
+/**
+*   validate an email verification key
+*/
+$app->get('/api/verify', function(Request $request, Response $response) {
+    $userRepository = new \Auth3\Repositories\UserRepository();
+
+    $key = $request->getParam('key');
+    $email = $request->getParam('from');
+    if ($email == null) {
+        $json = [
+            'error' => "Missing parameter: `from`"
+        ];
+        return $response->withJson($json, 400);
+    } else if ($key == null || strlen($key) != 40) {
+        $json = [
+            'error' => "Missing valid parameter value: `key`"
+        ];
+        return $response->withJson($json, 400);
+    } else {
+        $userData = $userRepository->getUserEntityByEmail($email);
+        if ($userData == null) {
+            $json = [
+                'error' => "User does not exist: " . $email
+            ];
+            return $response->withJson($json, 404);
+        } else {
+            if ($userData->getEmailVerification() == $key) {
+                $userRepository->setEmailVerificationForUser($userData->getIdentifier(), true);
+                return $response->withRedirect('http://' . $_SERVER['HTTP_HOST'].':3000/account', 302);
+            } else {
+                $json = [
+                    'error' => "That key is not valid."
+                ];
+                return $response->withJson($json, 400);
+            }
+        }
+    }
+});
+
+/** 
+*   validate a token
+*/
+$app->map(['GET', 'POST'], '/api/token/validate', function(Request $request, Response $response) {
+    return $response;
 })->add($oauth_resource_server_middleware);
 
 $app->any('/test', function(Request $request, Response $response) {
@@ -485,7 +661,7 @@ $app->options('/{routes:.+}', function ($request, $response, $args) {
 $app->add(function($req, $res, $next) {
     $response = $next($req, $res);
     return $response
-            ->withHeader('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->withHeader('Access-Control-Allow-Origin', 'http://localhost:81')
             ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
             ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
 });

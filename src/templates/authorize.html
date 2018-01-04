@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en-US">
+	<head>
+		<meta charset="utf-8" />
+		<meta author="tkluge" />
+		<meta name="viewport" content="initial-scale=1, width=device-width, maximum-scale=1, minimum-scale=1, user-scalable=no">
+		<link href='https://fonts.googleapis.com/css?family=Roboto:300,400' rel='stylesheet' type='text/css'>
+		<link rel="stylesheet" type="text/css" href="./css/authorize.css">
+		<meta name="theme-color" content="#225378">
+		<title>Authorize application</title>
+	</head>
+	<body>
+		<div class="bg-panel"></div>
+		<div id="root">
+			<div class="authorize" id="modal">
+				<div class="progress">
+			    	<div class="indeterminate"></div>
+			  	</div>
+				<section class="input-carousel" id="carousel">
+					<div class="carousel-container" id="carousel-container" data-offset="0">
+
+						<form class="carousel-item" id="form-1">
+							<header class="modal-header">
+								<h1>Authorize this application?</h1>
+								<h2><em class="application-name" id="app-name"></em> <span id="message">Checking request data...</span></h2>
+							</header>
+
+							<ul class="scope-list" id="scope-list"></ul>
+							
+							<div class="button-row">
+								<a href="" id="btn-deny">Cancel</a>
+								<button class="btn btn-primary" id="btn-next" type="button">Authorize<link class="rippleJS"></button>
+							</div>
+						</form>
+					</div>
+				</section>
+			</div>
+		</div>
+		<footer class="footer">
+			<a href="about/terms">Terms</a>
+			<a href="about/privacy">Privacy</a>
+			<a href="about/help">Help</a>
+		</footer>
+	</body>
+	<script type="text/javascript" src="./js/authorize.bundle.js"></script>
+</html>
