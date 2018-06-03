@@ -127,8 +127,7 @@ class TwoFactorPasswordGrant extends \League\OAuth2\Server\Grant\AbstractGrant {
 
             if (!$usingRecovery) {
                 // check to see if authcode is valid if not using a recovery code
-                $g = new \GAuth\Auth($user->getGoogleAuthenticatorCode());
-                $verify = $g->validateCode($authcode);
+                $verify = \Auth3\Util\TwoFactor::verify($user->getGoogleAuthenticatorCode(), $authcode);
                 if (!$verify) {
                     $logRepository->addEvent(new \Auth3\Entities\EventLogEntity('user', 'login-fail', $_SERVER['REMOTE_ADDR'] . ' provided invalid 2-factor code', $user->getIdentifier()));
                     $this->getEmitter()->emit(new RequestEvent(RequestEvent::USER_AUTHENTICATION_FAILED, $request));

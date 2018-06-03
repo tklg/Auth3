@@ -10,8 +10,10 @@
 		<title>My account</title>
 	</head>
 	<body class="flex-container fc-vertical">
-		<div id="app">
-			<page-header></page-header>
+		<div id="app" :class="{'scroll-disabled-mobile': mobileMenuActive}">
+			<page-header 
+				:mobile-menu-active="mobileMenuActive"
+				:toggle-mobile-menu="toggleMobileMenu"></page-header>
 			<div class="progress" :class="{shown: loading, bound: scrollPos >= 50}">
 			  	<div class="indeterminate"></div>
 			</div>
@@ -20,12 +22,14 @@
 					slot="nav"
 					:pages="pages" 
 					:select-page="selectPage"
-					:active-page="activePage">
+					:active-page="activePage"
+					:mobile-menu-active="mobileMenuActive">
 					<user-panel 
 						slot="userpanel"
 						:user="user"
 						:logout="logout">
 					</user-panel>
+					<div class="sidebar-cover" slot="cover" v-on:click="toggleMobileMenu"></div>
 				</left-nav>
 				<content-account
 					slot="content"
@@ -63,6 +67,11 @@
 	<script type="text/x-template" id="template-header">
 		<header class="header page-header flex-container fc-horizontal">
 			<div class="width-restrict">
+				<button :class="{active: mobileMenuActive}" v-on:click="toggleMobileMenu">
+					<svg viewBox="0 0 24 24">
+				    	<path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z" />
+					</svg>
+				</button>
 				<span id="title"><span class="brand">Auth3</span><span class="tag">Account</span></span>
 			</div>
 		</header>
@@ -78,18 +87,21 @@
 		</main>
 	</script>
 	<script type="text/x-template" id="template-left-nav">
-		<nav class="nav nav-v nav-side">
-			<aside class="user-panel-container">
-				<slot name="userpanel"></slot>
-			</aside>
-			<ul>
-				<li 
-					v-for="page in pages" 
-					v-on:click="selectPage(page.id)"
-					:class="{selected: activePage === page.id}">
-					{{ page.title }}
-				</li>
-			</ul>
+		<nav class="nav nav-v nav-side" :class="{active: mobileMenuActive}">
+			<div class="container">
+				<aside class="user-panel-container">
+					<slot name="userpanel"></slot>
+				</aside>
+				<ul>
+					<li 
+						v-for="page in pages" 
+						v-on:click="selectPage(page.id)"
+						:class="{selected: activePage === page.id}">
+						{{ page.title }}
+					</li>
+				</ul>
+			</div>
+			<slot name="cover"></slot>
 		</nav>
 	</script>
 	<script type="text/x-template" id="template-content-account">
@@ -173,7 +185,7 @@
 					<li v-for="session in userSecurity.sessions"  :class="{selected: session.current}">
 						<button class="btn" v-on:click="revokeSession(session.id)">Revoke<link class="rippleJS"></button>
 						<span>{{ session.ip }}</span>
-						<span><span>{{ session.browser }}</span> on <span>{{ session.os }}</span></span>
+						<span><span>{{ session.browser }}</span> on <span>{{ session.os }}</span><span v-if="session.device"> ({{ session.device }})</span></span>
 						<span>{{ session.country }}</span>
 						<span>Last used on {{ session.created }} </span>
 					</li>
@@ -183,7 +195,7 @@
 			<h2>A security log of events involving your account.</h2>
 			<div class="box">
 				<ul id="history-list">
-					<li class="flex-container" v-for="event in userSecurity.history" :title="event.detail + ' at ' + event.time">
+					<li class="flex-container" v-for="event in userSecurity.history" :title="event.detail + ' on ' + event.time">
 						<span>{{ event.namespace + '.' + event.action }}</span> <span class="flex">{{ event.detail }}</span> <span>{{ event.time }}</span>
 					</li>
 				</ul>
@@ -261,8 +273,9 @@
 				Scan the QR code to the left or manually enter this code:
 				<pre>{{ tfaEditorContent.qr_secret }}</pre>
 				Then, enter the 6-digit authentication code below:
-				<div class="flex-container fc-horizontal">
-					<underlined-input class="flex" name="authcode" :value="tfaEditorContent.authcode" placeholder="Auth code (xxxxxx)"></underlined-input>
+				<span class="uinput-error">{{tfaEditorContent.error}}</span>
+				<div class="flex-container fc-horizontal" v-on:keyup.enter="enableTfa">
+					<underlined-input class="flex" name="authcode" :value="tfaEditorContent.authcode" placeholder="000 000"></underlined-input>
 					<button class="btn btn-primary" v-on:click="enableTfa">Submit</button>
 				</div>
 			</div>

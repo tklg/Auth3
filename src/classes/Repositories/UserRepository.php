@@ -155,7 +155,11 @@ class UserRepository implements UserRepositoryInterface {
             $qdata = compact('firstname', 'familyname', 'id');
         } else if (isset($data['email'])) { // update email
             $email = $data['email'];
-            if ($email == $user->getEmail()) { // if the email hasnt changed, dont do anything
+            if ($user->getEmail() == 'test@test.test') {
+                return [
+                    'error' => 'Cannot modify the test email.'
+                ];
+            } else if ($email == $user->getEmail()) { // if the email hasnt changed, dont do anything
                 return [
                     'message' => 'User info not updated.'
                 ];
@@ -168,7 +172,11 @@ class UserRepository implements UserRepositoryInterface {
             // not good, fix
             if ($this->getUserEntityByUserCredentials($user->getEmail(), $data['password_old'], null, new ClientEntity(null, null, null)) == null) return ['error' => 'Password is incorrect.'];
             if ($data['password_new'] != $data['password_confirm']) return ['error' => 'Passwords do not match.'];
-
+            if ($user->getEmail() == 'test@test.test') {
+                return [
+                    'error' => 'Cannot modify the test password.'
+                ];
+            }
             $hashedpassword = password_hash($data['password_new'], PASSWORD_DEFAULT);
             $query = "UPDATE auth3_users SET password = :hashedpassword WHERE id = :id LIMIT 1";
             $qdata = compact('hashedpassword', 'id');
@@ -178,6 +186,28 @@ class UserRepository implements UserRepositoryInterface {
             $logRepository = new \Auth3\Repositories\EventLogRepository();
             $logRepository->addEvent($event);
         }
+        try {
+            $stmt = $db->prepare($query);
+            $stmt->execute($qdata);
+            return [
+                'message' => 'User info updated.'
+            ];
+        } catch (PDOException $e) {
+            return [
+                'error' => $e
+            ];
+        }
+    }
+
+    public function resetUserPassword($id, $data) {
+        if ($data['password_new'] != $data['password_confirm']) return ['error' => 'Passwords do not match.'];
+        $db = Database::getDatabase();
+        $hashedpassword = password_hash($data['password_new'], PASSWORD_DEFAULT);
+        $query = "UPDATE auth3_users SET password = :hashedpassword WHERE id = :id LIMIT 1";
+        $qdata = compact('hashedpassword', 'id');
+        $logRepository = new \Auth3\Repositories\EventLogRepository();
+        $event = new \Auth3\Entities\EventLogEntity('user', 'reset_password', $_SERVER['REMOTE_ADDR'], $id);
+        $logRepository->addEvent($event);
         try {
             $stmt = $db->prepare($query);
             $stmt->execute($qdata);

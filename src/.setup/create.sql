@@ -4,8 +4,7 @@ CREATE TABLE auth3_users (
 	password VARCHAR(255),
 	first_name VARCHAR(128),
 	family_name VARCHAR(128),
-	#g_authcode VARCHAR(64),
-	twofactor VARCHAR(16) DEFAULT NULL,		# contains g_authcode if yes, else nothing
+	twofactor VARCHAR(16) DEFAULT NULL,
 	using_twofactor TINYINT DEFAULT '0',
 	verification_status VARCHAR(40) DEFAULT 'false',
 	join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -44,6 +43,7 @@ CREATE TABLE auth3_access_tokens (
 	browser VARCHAR(64),
 	operating_system VARCHAR(64),
 	country VARCHAR(128),
+	device VARCHAR(64),
 	created TIMESTAMP
 		DEFAULT CURRENT_TIMESTAMP,
 	expires TIMESTAMP 
@@ -55,18 +55,9 @@ CREATE TABLE auth3_access_tokens (
 
 CREATE TABLE auth3_refresh_tokens (
 	id INT NOT NULL AUTO_INCREMENT,
-	/*user_id INT,
-	FOREIGN KEY (user_id)
-		REFERENCES auth3_users(id)
-		ON DELETE CASCADE,
-	client_id INT,
-	FOREIGN KEY (client_id)
-		REFERENCES auth3_clients(id)
-		ON DELETE CASCADE,*/
 	refresh_token VARCHAR(128),
 	access_token VARCHAR(128),
 	refresh_token_raw VARCHAR(512),
-	/*scopes VARCHAR(2048),*/
 	is_revoked TINYINT(1) DEFAULT '0',
 	expires TIMESTAMP 
 		DEFAULT CURRENT_TIMESTAMP
@@ -86,7 +77,7 @@ CREATE TABLE auth3_authorization_codes (
 	FOREIGN KEY (client_id)
 		REFERENCES auth3_clients(id)
 		ON DELETE CASCADE,
-	authorization_code VARCHAR(40),
+	authorization_code VARCHAR(80),
 	is_revoked TINYINT(1) DEFAULT '0',
 	expires TIMESTAMP 
 		DEFAULT CURRENT_TIMESTAMP
@@ -128,19 +119,15 @@ CREATE TABLE auth3_recovery_codes (
 	PRIMARY KEY (id)
 ) charset=utf8 ENGINE=INNODB;
 
--- CREATE TABLE auth3_map_scopes_to_tokens (
--- 	id INT NOT NULL AUTO_INCREMENT,
--- 	scope_id INT,
--- 	FOREIGN KEY (scope_id)
--- 		REFERENCES auth3_scopes(id)
--- 		ON DELETE CASCADE,
--- 	access_token_id INT,
--- 	FOREIGN KEY (access_token_id)
--- 		REFERENCES auth3_access_tokens(id)
--- 		ON DELETE CASCADE,
--- 	refresh_token_id INT,
--- 	FOREIGN KEY (refresh_token_id)
--- 		REFERENCES auth3_refresh_tokens(id)
--- 		ON DELETE CASCADE,
--- 	PRIMARY KEY (id)
--- ) charset=utf8 ENGINE=INNODB;
+CREATE TABLE auth3_password_reset (
+	id INT NOT NULL AUTO_INCREMENT,
+	user_id INT,
+	code CHAR(40),
+	expires TIMESTAMP,
+	FOREIGN KEY (user_id)
+		REFERENCES auth3_users(id)
+		ON DELETE CASCADE,
+	UNIQUE (user_id),
+	UNIQUE (code),
+	PRIMARY KEY (id)
+) charset=utf8 ENGINE=INNODB;

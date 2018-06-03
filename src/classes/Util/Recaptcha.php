@@ -8,7 +8,7 @@ class Recaptcha {
 
 	public static function verify($response, $remoteip) {
 		$data = [
-			'secret' => RecaptchaKey::getKey(),
+			'secret' => \Auth3\Config::getConfig()['captcha']['private'],
 			'response' => $response,
    			'remoteip' => $remoteip
    		];

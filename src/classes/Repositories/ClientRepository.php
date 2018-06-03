@@ -31,7 +31,9 @@ class ClientRepository implements ClientRepositoryInterface {
             $redirectUri = $client['redirect_uri'];
             $clientDisplayName = $client['client_display'];
             $clientID = $client['id'];
-            if ($mustValidateSecret && $secret !== $clientSecret) return null;
+            if ($mustValidateSecret && $secret !== $clientSecret) {
+                return null;
+            }
             if ($this->isGrantTypeIncluded($grantType, $availableGrantTypes)) {
                  return new ClientEntity($clientID, $clientDisplayName, $redirectUri);
             }

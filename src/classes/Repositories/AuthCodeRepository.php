@@ -32,15 +32,20 @@ class AuthCodeRepository implements AuthCodeRepositoryInterface {
         $db = Database::getDatabase();
 
         $scopes = $authCodeEntity->getScopes();
-        /*$scopeStrings = [];
-        for ($i = 0; $i < count($scopes); $i++) {
-            $scopeStrings[] = $scopes[$i]->getIdentifier();
-        }*/
-        $scopes = join(',', $scopes);
+        if ($scopes[0] instanceof Auth3\Entities\ScopeEntity) {
+            $scopeStrings = [];
+            for ($i = 0; $i < count($scopes); $i++) {
+                $scopeStrings[] = $scopes[$i]->getIdentifier();
+            }
+            $scopes = join(',', $scopeStrings);
+        } else {
+            $scopes = join(',', $scopes);
+        }
 
         $clientId = $authCodeEntity->getClient()->getIdentifier();
         $userId = $authCodeEntity->getUserIdentifier();
-        $authCode = hash('sha512', $authCodeEntity->getIdentifier());
+        //$authCode = hash('sha512', $authCodeEntity->getIdentifier());
+        $authCode = $authCodeEntity->getIdentifier();
         $expires = $authCodeEntity->getExpiryDateTime()->format('Y-m-d H:i:s');
 
         $stmt = $db->prepare("INSERT INTO auth3_authorization_codes (user_id, client_id, authorization_code, expires, scopes) VALUES (:userId, :clientId, :authCode, :expires, :scopes)");
@@ -67,8 +72,9 @@ class AuthCodeRepository implements AuthCodeRepositoryInterface {
      */
     public function revokeAuthCode($codeId) {
         $db = Database::getDatabase();
-        $authCode = hash('sha512', $codeId);
-        $stmt = $db->prepare("UPDATE auth3_authorization_codes SET is_revoked = 1 WHERE authorization_code = :tokenId LIMIT 1");
+        //$authCode = hash('sha512', $codeId);
+        $authCode = $codeId;
+        $stmt = $db->prepare("UPDATE auth3_authorization_codes SET is_revoked = 1 WHERE authorization_code = :authCode LIMIT 1");
         return $stmt->execute(compact('authCode'));
     }
 
@@ -81,9 +87,10 @@ class AuthCodeRepository implements AuthCodeRepositoryInterface {
      */
     public function isAuthCodeRevoked($codeId) {
         $db = Database::getDatabase();
-        $authCode = hash('sha512', $codeId);
+        //$authCode = hash('sha512', $codeId);
+        $authCode = $codeId;
 
-        $stmt = $db->prepare("SELECT is_revoked FROM auth3_authorization_codes WHERE access_token = :authCode LIMIT 1");
+        $stmt = $db->prepare("SELECT is_revoked FROM auth3_authorization_codes WHERE authorization_code = :authCode LIMIT 1");
         $stmt->execute(compact('authCode'));
         if ($token = $stmt->fetch()) {
             if ($token['is_revoked'] === 1) return true;

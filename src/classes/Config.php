@@ -16,7 +16,10 @@ class Config {
 				'pass' => 'auth3',
 				'dbname' => 'auth3'
 			],
-			'captcha' => '6LdxLCcUAAAAAEZqZx8XKjp__eNnlv537mJ7D28t',
+			'captcha' => [
+				'private' => '6LdxLCcUAAAAAEZqZx8XKjp__eNnlv537mJ7D28t',
+				'public' => '6LdxLCcUAAAAAP8ZPgCUiGy_eY_AzLIJgLt3BSFD'
+			],
 			'email' => [
 				'smtp_hostname' => 'smtp.mailgun.org',
 				'smtp_login' => 'postmaster@sandbox3e7a636467bd4ec9ad7e0cd6bd37237b.mailgun.org',

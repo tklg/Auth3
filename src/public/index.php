@@ -6,15 +6,9 @@ use \Auth3\Database\Database;
 use \Auth3\OAuth2;
 use \Auth3\OAuth2Resource;
 use \Auth3\Config;
+use \Auth3\Util\TwoFactor;
 
 require '../../vendor/autoload.php';
-
-/*$config['displayErrorDetails'] = true;
-$config['addContentLengthHeader'] = false;
-$config['db']['host']   = "localhost";
-$config['db']['user']   = "auth3";
-$config['db']['pass']   = "auth3";
-$config['db']['dbname'] = "auth3";*/
 
 $config = Config::getConfig();
 
@@ -31,12 +25,6 @@ $container['logger'] = function($c) {
 $database = Database::register($container['settings']['db']);
 
 $container['db'] = function ($c) {
-    /*$db = $c['settings']['db'];
-    $pdo = new PDO("mysql:host=" . $db['host'] . ";dbname=" . $db['dbname'],
-        $db['user'], $db['pass']);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-    return $pdo;*/
     return $database;
 };
 $container['view'] = new \Slim\Views\PhpRenderer("../templates/");
@@ -49,29 +37,44 @@ $oauth_resource_server_middleware = new \League\OAuth2\Server\Middleware\Resourc
 	"publicKey" => $config['publicKey']
 ]));
 
-$app->get('/', function(Request $request, Response $response) {
+$app->get('/[login]', function(Request $request, Response $response) {
 	return $this->view->render($response, "index.html");
 });
 $app->get('/account', function(Request $request, Response $response) {
     return $this->view->render($response, "account.html");
 });
 $app->get('/signup', function(Request $request, Response $response) {
-    return $this->view->render($response, "signup.html");
+    return $this->view->render($response, "signup.phtml", ['captchaSiteKey' => \Auth3\Config::getConfig()['captcha']['public']]);
 });
 $app->get('/forgot', function(Request $request, Response $response) {
-    return $this->view->render($response, "forgot.html");
+    return $this->view->render($response, "forgot.phtml", ['captchaSiteKey' => \Auth3\Config::getConfig()['captcha']['public']]);
 });
 $app->get('/recover', function(Request $request, Response $response) {
-    return $this->view->render($response, "recover.html");
+    $data = [
+        'email' => $request->getParam('from'),
+        'key' => $request->getParam('key')
+    ];
+    return $this->view->render($response, "recover.phtml", $data);
 });
 $app->get('/authorize', function(Request $request, Response $response) {
     return $this->view->render($response, "authorize.html");
+});
+$app->group('/about', function() {
+    $this->get('/terms', function(Request $request, Response $response) {
+        return $this->view->render($response, "terms.html");
+    });
+    $this->get('/privacy', function(Request $request, Response $response) {
+        return $this->view->render($response, "privacy.html");
+    });
+    $this->get('/help', function(Request $request, Response $response) {
+        return $this->view->render($response, "help.html");
+    });
 });
 
 /** Create a new user
 * POST => [email,password,g-recaptcha-response]
 */
-$app->post('/api/users/new', function(Request $request, Response $response) {
+$app->post('/api/user/new', function(Request $request, Response $response) {
     $userRepository = new \Auth3\Repositories\UserRepository();
     $email = $request->getParsedBodyParam('email');
     $password = $request->getParsedBodyParam('password');
@@ -87,11 +90,11 @@ $app->post('/api/users/new', function(Request $request, Response $response) {
             'image' => 'https://www.gravatar.com/avatar/'.md5($result['user']->getEmail()).'?d=retro&r=r'
         ];
         $email = new \Auth3\Util\Email();
-        $email->setTo($userData->getEmail());
+        $email->setTo($result['user']->getEmail());
         $email->setFrom('Auth3 <auth3@tkluge.net>');
         $email->setSubject('Email verification');
-        $link = 'http://'.$_SERVER['HTTP_HOST']."/api/verify?key=".$userData->getEmailVerification().'&from='.$userData->getEmail();
-        $email->setText('Hello, ' . $userData->getEmail() . '! Use this link to verify your email address: ' . $link);
+        $link = 'http://'.$_SERVER['HTTP_HOST']."/api/verify?key=".$result['user']->getEmailVerification().'&from='.$result['user']->getEmail();
+        $email->setText('Hello, ' . $result['user']->getEmail() . '! Use this link to verify your email address: ' . $link);
         try {
             $result = $email->send();
             $json['message'] = 'Email sent';
@@ -146,7 +149,7 @@ $app->post('/api/token', function(Request $request, Response $response) {
         // All instances of OAuthServerException can be formatted into a HTTP response
         return $exception->generateHttpResponse($response); 
     /*} catch (\Auth3\Exception\Auth3Exception $exception) {
-    	return $exception->generateHttpResponse($response);*/
+        return $exception->generateHttpResponse($response);*/
     } catch (\Exception $exception) {
         // Unknown exception
         $body = $response->getBody();
@@ -160,6 +163,9 @@ $app->post('/api/token', function(Request $request, Response $response) {
 *   delete an auth token
 */
 $app->delete('/api/token/{id}', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $tokenId = $request->getAttribute('id');
     
     $accessTokenRepository = new \Auth3\Repositories\AccessTokenRepository();
@@ -176,6 +182,9 @@ $app->delete('/api/token/{id}', function(Request $request, Response $response) {
 *   delete all tokens for a client
 */
 $app->delete('/api/client_token/{id}', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $clientId = $request->getAttribute('id');
     
     $accessTokenRepository = new \Auth3\Repositories\AccessTokenRepository();
@@ -208,6 +217,9 @@ $app->get('/api/logout', function(Request $request, Response $response) {
 * GET -> [response_type, client_id, redirect_uri, scope, state]
 */
 $app->get('/api/authorize', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
 	$server = $this->oauth_server;
 
     $userId = $request->getAttribute('oauth_user_id');
@@ -312,6 +324,9 @@ $app->get('/api/authorize/deny', function(Request $request, Response $response) 
 * HEADER => [Authorization]
 */
 $app->get('/api/user/info', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.email'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $userRepository = new \Auth3\Repositories\UserRepository();
     $userData = $userRepository->getUserEntityByIdentifier($request->getAttribute('oauth_user_id'));
     if ($userData != null) {
@@ -338,6 +353,9 @@ $app->get('/api/user/info', function(Request $request, Response $response) {
 * return user security details (2fa, sessions, history)
 */
 $app->get('/api/user/security', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $userRepository = new \Auth3\Repositories\UserRepository();
     $accessTokenRepository = new \Auth3\Repositories\AccessTokenRepository();
     $logRepository = new \Auth3\Repositories\EventLogRepository();
@@ -360,6 +378,9 @@ $app->get('/api/user/security', function(Request $request, Response $response) {
 *   return user's authorized applications
 */
 $app->get('/api/user/applications', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $appRepository = new \Auth3\Repositories\ClientRepository();
     $userId = $request->getAttribute('oauth_user_id');
     $apps = $appRepository->getClientsAuthorizedByUser($userId);
@@ -376,6 +397,9 @@ $app->get('/api/user/applications', function(Request $request, Response $respons
 *   update user info
 */
 $app->post('/api/user/info', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $userId = $request->getAttribute('oauth_user_id');
     $userRepository = new \Auth3\Repositories\UserRepository();
 
@@ -390,8 +414,11 @@ $app->post('/api/user/info', function(Request $request, Response $response) {
     $data = buildFromParams($request, ['firstname', 'familyname', 'email', 'password_old', 'password_new', 'password_confirm']);
     if (sizeof($data) == 0) $json = ['error', 'Request is empty.'];
     else $json = $userRepository->updateUser($userId, $data);
-
-    $response = $response->withJson($json);
+    if (isset($json['error'])) {
+        $response = $response->withJson($json, 401);
+    } else {
+        $response = $response->withJson($json);
+    }
     return $response;
 })->add($oauth_resource_server_middleware);
 
@@ -399,29 +426,25 @@ $app->post('/api/user/info', function(Request $request, Response $response) {
 *   get two-factor qr data before enabling 2fa
 */
 $app->get('/api/user/security/twofactor', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $userRepository = new \Auth3\Repositories\UserRepository();
     $userId = $request->getAttribute('oauth_user_id');
     $userData = $userRepository->getUserEntityByIdentifier($userId);
-    $size = $request->getParam('size');
-    if ($size == null) {
-        $size = 30;
-    }
     
     if ($userData->hasTwoFactor()) {
         $json = [
             'error' => 'Two-factor authentication is already enabled for this user.'
         ];
     } else {
-        $g = new \GAuth\Auth();
-
         $secret = $userData->getGoogleAuthenticatorCode();
         if ($secret == '') {
-            $secret = $g->generateCode();
+            $secret = TwoFactor::createSecret();
             // set twofactor in auth3_users to a new unique code
             $userRepository->setTwoFactorForUser($userId, $secret);
         }
-        $g->setInitKey($secret);
-        $qrImage = \Auth3\Util\TwoFactor::generateQrImage($userData->getEmail(), 'Auth3', $g->getInitKey(), $size);
+        $qrImage = TwoFactor::generateQrImage($userData->getEmail(), 'Auth3', $secret);
         $json = [
             'qr_image' => 'data:image/png;base64,'.base64_encode($qrImage),
             'qr_secret' => $secret
@@ -436,6 +459,9 @@ $app->get('/api/user/security/twofactor', function(Request $request, Response $r
 *   enable 2FA
 */
 $app->post('/api/user/security/twofactor/enable', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $userRepository = new \Auth3\Repositories\UserRepository();
     $logRepository = new \Auth3\Repositories\EventLogRepository();
     $userId = $request->getAttribute('oauth_user_id');
@@ -452,13 +478,12 @@ $app->post('/api/user/security/twofactor/enable', function(Request $request, Res
             'error' => "Auth code is incorrectly formatted."
         ], 401);
     } else {
-        $g = new \GAuth\Auth($secret);
-        if (!$g->validateCode($authcode)) {
+        if (!TwoFactor::verify($secret, $authcode)) {
             return $response->withJson([
                 'error' => "Auth code is invalid."
             ], 401);
         } else {
-            $codes = \Auth3\Util\TwoFactor::generateRecoveryCodes(10);
+            $codes = TwoFactor::generateRecoveryCodes(10);
             $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
             if ($codeRepository->addCodesForUser($userId, $codes)) {
                 $userRepository->setUsingTwoFactorForUser($userId, true);
@@ -479,6 +504,9 @@ $app->post('/api/user/security/twofactor/enable', function(Request $request, Res
 *   disable 2FA
 */
 $app->post('/api/user/security/twofactor/disable', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $userRepository = new \Auth3\Repositories\UserRepository();
     $logRepository = new \Auth3\Repositories\EventLogRepository();
     $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
@@ -509,6 +537,9 @@ $app->post('/api/user/security/twofactor/disable', function(Request $request, Re
 *   fetch 2FA recovery codes
 */
 $app->post('/api/user/security/twofactor/codes', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
     $userRepository = new \Auth3\Repositories\UserRepository();
     $userId = $request->getAttribute('oauth_user_id');
@@ -534,6 +565,9 @@ $app->post('/api/user/security/twofactor/codes', function(Request $request, Resp
 *   regenerate 2FA recovery codes
 */
 $app->post('/api/user/security/twofactor/codes/regen', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
     $userRepository = new \Auth3\Repositories\UserRepository();
     $codeRepository = new \Auth3\Repositories\RecoveryCodeRepository();
@@ -569,6 +603,9 @@ $app->post('/api/user/security/twofactor/codes/regen', function(Request $request
 *   send email verification code to user's email
 */
 $app->post('/api/sendverification', function(Request $request, Response $response) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.all'], $request->getAttribute('oauth_scopes'))) {
+        return $response->withJson(['error' => "Insufficient scope."], 401);
+    }
     $userRepository = new \Auth3\Repositories\UserRepository();
     $userId = $request->getAttribute('oauth_user_id');
     $userData = $userRepository->getUserEntityByIdentifier($userId);
@@ -626,7 +663,7 @@ $app->get('/api/verify', function(Request $request, Response $response) {
         } else {
             if ($userData->getEmailVerification() == $key) {
                 $userRepository->setEmailVerificationForUser($userData->getIdentifier(), true);
-                return $response->withRedirect('http://' . $_SERVER['HTTP_HOST'].':3000/account', 302);
+                return $response->withRedirect('http://' . $_SERVER['HTTP_HOST'].'/account', 302);
             } else {
                 $json = [
                     'error' => "That key is not valid."
@@ -637,14 +674,98 @@ $app->get('/api/verify', function(Request $request, Response $response) {
     }
 });
 
+$app->post('/api/user/recover', function(Request $request, Response $response) {
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $recoveryCodeRepository = new \Auth3\Repositories\PasswordRecoveryCodeRepository();
+    $email = $request->getParsedBodyParam('email');
+    $user = $userRepository->getUserEntityByEmail($email);
+    $recaptcha = $request->getParsedBodyParam('g-recaptcha-response');
+    if ($user != null) {
+
+        // create and save recovery key
+        if (function_exists('random_bytes')) {
+            $bytes = bin2hex(random_bytes(20));
+        } else {
+            $bytes = bin2hex(openssl_random_pseudo_bytes(20));
+        }
+        $recoveryCodeRepository->removeCodesForUser($user->getIdentifier());
+        if ($recoveryCodeRepository->addCodeForUser($user->getIdentifier(), $bytes) != null) {
+            if (\Auth3\Util\Recaptcha::verify($recaptcha, $_SERVER['HTTP_HOST'])) {
+                $email = new \Auth3\Util\Email();
+                $email->setTo($user->getEmail());
+                $email->setFrom('Auth3 <auth3@tkluge.net>');
+                $email->setSubject('Account recovery');
+                $link = 'http://'.$_SERVER['HTTP_HOST']."/recover?key=".$bytes.'&from='.$user->getEmail();
+                $email->setText('Hello, ' . $user->getEmail() . '! Use this link to reset your password: ' . $link);
+                try {
+                    $result = $email->send();
+                    $json = [
+                        'message' => 'Email sent',
+                        'mailgun_response' => $result
+                    ];
+                } catch (Exception $e) {
+                    return $response->withJson([
+                        'error' => $e->getMessage()
+                    ], 500);
+                }
+            } else {
+                return $response->withJson([
+                    'error' => 'Invalid recaptcha.'
+                ], 401);
+            }   
+        } else {
+            return $response->withJson([
+                'error' => 'Failed to generate secret.'
+            ], 401);
+        }
+    } else {
+        return $response->withJson([
+            'error' => 'A user with that email does not exist.'
+        ], 404);
+    }
+    return $response->withJson($json);
+});
+
+$app->post('/api/user/passwordreset', function(Request $request, Response $response) {
+    $userRepository = new \Auth3\Repositories\UserRepository();
+    $recoveryCodeRepository = new \Auth3\Repositories\PasswordRecoveryCodeRepository();
+    $email = $request->getParsedBodyParam('email');
+    $key = $request->getParsedBodyParam('key');
+    $password = $request->getParsedBodyParam('password');
+    $password2 = $request->getParsedBodyParam('password_confirm');
+    $user = $userRepository->getUserEntityByEmail($email);
+    if ($user != null) {
+        if ($recoveryCodeRepository->validateCodeForUser($user->getIdentifier(), $key)) {
+            $recoveryCodeRepository->removeCodesForUser($user->getIdentifier());
+            $data = [
+                'password_new' => $password,
+                'password_confirm' => $password2
+            ];
+            $json = $userRepository->resetUserPassword($user->getIdentifier(), $data);
+            if (isset($json['error'])) {
+                return $response->withJson($json, 401);
+            } else {
+                return $response->withJson($json);
+            }
+        } else {
+            return $response->withJson([
+                'error' => 'Invalid key.'
+            ], 401);
+        }
+    } else {
+        return $response->withJson([
+            'error' => 'A user with that email does not exist.'
+        ], 404);
+    }
+});
 /** 
 *   validate a token
 */
-$app->map(['GET', 'POST'], '/api/token/validate', function(Request $request, Response $response) {
+/*$app->map(['GET', 'POST'], '/api/token/validate', function(Request $request, Response $response) {
     return $response;
 })->add($oauth_resource_server_middleware);
 
-$app->any('/test', function(Request $request, Response $response) {
+$app->options('/test', function(Request $request, Response $response) {
     $json = [
         'oauth_access_token_id' => $request->getAttribute('oauth_access_token_id'),
         'oauth_client_id' => $request->getAttribute('oauth_client_id'),
@@ -653,7 +774,7 @@ $app->any('/test', function(Request $request, Response $response) {
     ];
     $response = $response->withJson($json);
     return $response;
-})->add($oauth_resource_server_middleware);
+})->add($oauth_resource_server_middleware);*/
 
 $app->options('/{routes:.+}', function ($request, $response, $args) {
     return $response;

@@ -45,12 +45,15 @@ class AccessTokenRepository implements AccessTokenRepositoryInterface {
      */
     public function persistNewAccessToken(AccessTokenEntityInterface $accessTokenEntity) {
         $scopes = $accessTokenEntity->getScopes();
-        /*$scopeStrings = [];
-        for ($i = 0; $i < count($scopes); $i++) {
-            $scopeStrings[] = $scopes[$i]->getIdentifier();
+        if ($scopes[0] instanceof Auth3\Entities\ScopeEntity) {
+            $scopeStrings = [];
+            for ($i = 0; $i < count($scopes); $i++) {
+                $scopeStrings[] = $scopes[$i]->getIdentifier();
+            }
+            $scopes = join(',', $scopeStrings);
+        } else {
+            $scopes = join(',', $scopes);
         }
-        $scopes = join(',', $scopeStrings);*/
-        $scopes = join(',', $scopes);
         $token = hash('sha512', $accessTokenEntity->getIdentifier());
         $userIdentifier = $accessTokenEntity->getUserIdentifier();
         $clientIdentifier = $accessTokenEntity->getClient()->getIdentifier();
@@ -60,15 +63,15 @@ class AccessTokenRepository implements AccessTokenRepositoryInterface {
         $os = $userData['os'];
         $browser = $userData['browser'];
         $country = $userData['country'];
+        $device = $userData['device'];
+        //var_dump(compact('userIdentifier', 'clientIdentifier', 'token', 'expiryDateTime', 'scopes', 'ip', 'browser', 'os', 'country', 'device'));
 
         $db = Database::getDatabase();
 
-        $stmt = $db->prepare("INSERT INTO auth3_access_tokens (user_id, client_id, access_token, expires, scopes, ip_address, browser, operating_system, country) VALUES (:userIdentifier, :clientIdentifier, :token, :expiryDateTime, :scopes, :ip, :browser, :os, :country)");
-
+        $stmt = $db->prepare("INSERT INTO auth3_access_tokens (user_id, client_id, access_token, expires, scopes, ip_address, browser, operating_system, country, device) VALUES (:userIdentifier, :clientIdentifier, :token, :expiryDateTime, :scopes, :ip, :browser, :os, :country, :device)");
         try {
-           $stmt->execute(compact('userIdentifier', 'clientIdentifier', 'token', 'expiryDateTime', 'scopes', 'ip', 'browser', 'os', 'country'));
+           $stmt->execute(compact('userIdentifier', 'clientIdentifier', 'token', 'expiryDateTime', 'scopes', 'ip', 'browser', 'os', 'country', 'device'));
            // successful insertion, not a duplicate
-
         } catch (PDOException $e) {
            //if ($e->errorInfo[1] == 1062) {
            if ($e->errorInfo[0] === 23000) {
@@ -146,7 +149,7 @@ class AccessTokenRepository implements AccessTokenRepositoryInterface {
     public function getAccessTokensByUserId($userId, $currentTokenId = '') {
         $db = Database::getDatabase();
 
-        $stmt = $db->prepare("SELECT at.id, at.client_id, cl.client_display as name, at.ip_address as ip, at.browser, at.operating_system as os, at.country, at.scopes, at.created, at.expires ".
+        $stmt = $db->prepare("SELECT at.id, at.client_id, cl.client_display as name, at.ip_address as ip, at.browser, at.operating_system as os, at.country, at.device, at.scopes, at.created, at.expires ".
                              "FROM auth3_access_tokens at, auth3_clients cl ".
                              "WHERE at.client_id = cl.id AND at.is_revoked = 0 AND at.user_id = :userId AND at.expires > NOW() AND at.client_id = 1 ".
                              "ORDER BY at.expires DESC");
