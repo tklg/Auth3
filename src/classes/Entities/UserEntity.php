@@ -5,6 +5,7 @@ namespace Auth3\Entities;
 class UserEntity implements UserEntityInterface {
 
 	protected $identifier = null;
+    protected $uuid = null;
     protected $email = null;
 	protected $hasTwoFactor = false;
 	protected $gAuthCode = null;
@@ -13,8 +14,9 @@ class UserEntity implements UserEntityInterface {
     protected $familyname = null;
     protected $joindate = null;
 
-	public function __construct($identifier, $email, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate) {
+	public function __construct($identifier, $uuid, $email, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate) {
 		$this->identifier = $identifier;
+        $this->uuid = $uuid;
         $this->email = $email;
 		$this->hasTwoFactor = $hasTwoFactor;
 		$this->gAuthCode = $gAuthCode;
@@ -25,12 +27,21 @@ class UserEntity implements UserEntityInterface {
 	}
 
     /**
-     * Return the user's identifier.
+     * Return the user's database identifier.
      *
      * @return mixed
      */
     public function getIdentifier() {
     	return $this->identifier;
+    }
+
+    /**
+     * Return the user's uuid.
+     *
+     * @return mixed
+     */
+    public function getUUID() {
+        return $this->uuid;
     }
 
     /**

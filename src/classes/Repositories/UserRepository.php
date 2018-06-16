@@ -41,6 +41,7 @@ class UserRepository implements UserRepositoryInterface {
         if ($user = $stmt->fetch()) {
 
             $id = $user['id'];
+            $uuid = $user['uuid'];
             $firstname = $user['first_name'];
             $familyname = $user['family_name'];
             $joindate = $user['join_date'];
@@ -50,7 +51,7 @@ class UserRepository implements UserRepositoryInterface {
             $verified = $user['verification_status'];
 
     		if (password_verify($password, $password_hash)) {
-    			return new UserEntity($id, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
+    			return new UserEntity($id, $uuid, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
     		}
 
     	}
@@ -68,6 +69,7 @@ class UserRepository implements UserRepositoryInterface {
 
         if ($user = $stmt->fetch()) {
 
+            $uuid = $user['uuid'];
             $username = $user['email'];
             $firstname = $user['first_name'];
             $familyname = $user['family_name'];
@@ -76,7 +78,7 @@ class UserRepository implements UserRepositoryInterface {
             $hasTwoFactor = $user['using_twofactor'] == 1;
             $verified = $user['verification_status'];
             
-            return new UserEntity($identifier, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
+            return new UserEntity($identifier, $uuid, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
         }
         return null;
     }
@@ -93,6 +95,7 @@ class UserRepository implements UserRepositoryInterface {
         if ($user = $stmt->fetch()) {
 
             $identifier = $user['id'];
+            $uuid = $user['uuid'];
             $username = $user['email'];
             $firstname = $user['first_name'];
             $familyname = $user['family_name'];
@@ -101,7 +104,7 @@ class UserRepository implements UserRepositoryInterface {
             $hasTwoFactor = $user['using_twofactor'] == 1;
             $verified = $user['verification_status'];
             
-            return new UserEntity($identifier, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
+            return new UserEntity($identifier, $uuid, $username, $firstname, $familyname, $hasTwoFactor, $gAuthCode, $verified, $joindate);
         }
         return null;
     }
@@ -128,8 +131,9 @@ class UserRepository implements UserRepositoryInterface {
         } else {
             $bytes = bin2hex(openssl_random_pseudo_bytes(20));
         }
-        $stmt = $db->prepare("INSERT INTO auth3_users (email, password, verification_status) VALUES (:email, :hashedpassword, :bytes)");
-        $stmt->execute(compact('email', 'hashedpassword', 'bytes'));
+        $uuid = \Auth3\lib\UUID::v4();
+        $stmt = $db->prepare("INSERT INTO auth3_users (uuid, email, password, verification_status) VALUES (:uuid, :email, :hashedpassword, :bytes)");
+        $stmt->execute(compact('uuid', 'email', 'hashedpassword', 'bytes'));
 
         return [
             'error' => 'success',

@@ -324,13 +324,14 @@ $app->get('/api/authorize/deny', function(Request $request, Response $response) 
 * HEADER => [Authorization]
 */
 $app->get('/api/user/info', function(Request $request, Response $response) {
-    if (!\Auth3\Util\VerifyScopes::verify(['user.email'], $request->getAttribute('oauth_scopes'))) {
+    if (!\Auth3\Util\VerifyScopes::verify(['user.email', 'user.name'], $request->getAttribute('oauth_scopes'))) {
         return $response->withJson(['error' => "Insufficient scope."], 401);
     }
     $userRepository = new \Auth3\Repositories\UserRepository();
     $userData = $userRepository->getUserEntityByIdentifier($request->getAttribute('oauth_user_id'));
     if ($userData != null) {
         $json = [
+            'uuid' => $userData->getUUID(),
             'firstname' => $userData->getFirstname(),
             'familyname' => $userData->getFamilyname(),
             'email' => $userData->getEmail(),

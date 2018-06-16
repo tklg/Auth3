@@ -151,7 +151,8 @@ class AccessTokenRepository implements AccessTokenRepositoryInterface {
 
         $stmt = $db->prepare("SELECT at.id, at.client_id, cl.client_display as name, at.ip_address as ip, at.browser, at.operating_system as os, at.country, at.device, at.scopes, at.created, at.expires ".
                              "FROM auth3_access_tokens at, auth3_clients cl ".
-                             "WHERE at.client_id = cl.id AND at.is_revoked = 0 AND at.user_id = :userId AND at.expires > NOW() AND at.client_id = 1 ".
+                             "WHERE at.client_id = cl.id AND at.is_revoked = 0 AND at.user_id = :userId AND at.expires > NOW() ".
+                             //" AND at.client_id = 1 ".
                              "ORDER BY at.expires DESC");
         $stmt->execute(compact('userId'));
 

@@ -1,5 +1,6 @@
 CREATE TABLE auth3_users (
 	id INT NOT NULL AUTO_INCREMENT,
+	uuid CHAR(36),
 	email VARCHAR(128),
 	password VARCHAR(255),
 	first_name VARCHAR(128),
@@ -8,7 +9,8 @@ CREATE TABLE auth3_users (
 	using_twofactor TINYINT DEFAULT '0',
 	verification_status VARCHAR(40) DEFAULT 'false',
 	join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	PRIMARY KEY (id)
+	PRIMARY KEY (id),
+	UNIQUE (uuid)
 ) charset=utf8 ENGINE=INNODB;
 
 CREATE TABLE auth3_clients (
